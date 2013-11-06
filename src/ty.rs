@@ -1,6 +1,5 @@
 use err;
 use err::Fallible;
-use std::hashmap::HashMap;
 
 pub struct Context {
     interner: Interner,
@@ -82,7 +81,7 @@ impl Interner {
 }
 
 impl Context {
-    fn new() -> Context {
+    pub fn new() -> Context {
         let mut interner = Interner::new();
 
         let k_star = @Star;
@@ -123,7 +122,7 @@ impl Context {
 ///////////////////////////////////////////////////////////////////////////
 // Strings
 
-trait Describe {
+pub trait Describe {
     fn mk_str(&self, cx: &Context) -> ~str {
         let mut s = ~"";
         self.describe(cx, &mut s);
@@ -131,6 +130,12 @@ trait Describe {
     }
 
     fn describe(&self, cx: &Context, out: &mut ~str);
+}
+
+impl Describe for uint {
+    fn describe(&self, _: &Context, out: &mut ~str) {
+        out.push_str(format!("{}", *self));
+    }
 }
 
 impl Describe for Type {
@@ -168,6 +173,19 @@ impl Describe for Tyvar {
 impl Describe for Id {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         out.push_str(cx.interner.identifiers[self.repr]);
+    }
+}
+
+impl<D:Describe> Describe for ~[D] {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        let mut comma = false;
+        out.push_char('[');
+        for item in self.iter() {
+            if comma { out.push_char(','); }
+            item.describe(cx, out);
+            comma = true;
+        }
+        out.push_char(']');
     }
 }
 
