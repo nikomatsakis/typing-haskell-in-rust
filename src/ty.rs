@@ -21,11 +21,14 @@ pub enum Type {
 #[deriving(Eq,Clone)]
 pub struct Tyvar {
     id: Id,
-    kind: @Kind
 }
 
 #[deriving(Eq)]
 pub struct Tycon {
+    id: Id,
+}
+
+pub struct KindDef {
     id: Id,
     kind: @Kind
 }
@@ -69,6 +72,14 @@ impl cx::Describe for Kind {
     }
 }
 
+impl cx::Describe for KindDef {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        self.id.describe(cx, out);
+        out.push_str(" :: ");
+        self.kind.describe(cx, out);
+    }
+}
+
 impl cx::Describe for Tycon {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         self.id.describe(cx, out);
@@ -88,15 +99,15 @@ impl cx::Describe for Tyvar {
 // Section 4 / Page 7
 
 pub trait HasKind {
-    fn kind(&self) -> @Kind;
+    fn kind(&self, cx: &Context) -> @Kind;
 }
 
 impl HasKind for Type {
-    fn kind(&self) -> @Kind {
+    fn kind(&self, cx: &Context) -> @Kind {
         match *self {
-            TCon(tc) => tc.kind(),
-            TVar(v) => v.kind(),
-            TAp(t, _) => match *t.kind() {
+            TCon(tc) => tc.kind(cx),
+            TVar(v) => v.kind(cx),
+            TAp(t, _) => match *t.kind(cx) {
                 KFun(_, out) => out,
                 Star => fail!(format!("Invalid kind"))
             },
@@ -108,14 +119,14 @@ impl HasKind for Type {
 }
 
 impl HasKind for Tycon {
-    fn kind(&self) -> @Kind {
-        self.kind
+    fn kind(&self, cx: &Context) -> @Kind {
+        cx.kinds.get_copy(&self.id)
     }
 }
 
 impl HasKind for Tyvar {
-    fn kind(&self) -> @Kind {
-        self.kind
+    fn kind(&self, cx: &Context) -> @Kind {
+        cx.kinds.get_copy(&self.id)
     }
 }
 
@@ -147,7 +158,6 @@ impl Subst {
     }
 
     pub fn add(&mut self, from: Tyvar, to: @Type) {
-        assert_eq!(from.kind(), to.kind());
         self.pairs.push(SubstPair { from: from, to: to });
     }
 

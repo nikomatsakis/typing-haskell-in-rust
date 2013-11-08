@@ -1,12 +1,14 @@
 // Context: ties everything together
 
-use ty;
 use intern;
+use std::hashmap::HashMap;
+use ty;
 
 pub struct Context {
     interner: intern::Interner,
     k_star: @ty::Kind,
     types: StandardTypes,
+    kinds: HashMap<intern::Id,@ty::Kind>,
 }
 
 pub struct StandardTypes {
@@ -28,22 +30,36 @@ impl Context {
         let k_star = @ty::Star;
 
         let types = StandardTypes {
-            t_unit: @ty::TCon(ty::Tycon { id: interner.id("()"), kind: k_star }),
-            t_char: @ty::TCon(ty::Tycon { id: interner.id("Char"), kind: k_star }),
-            t_int: @ty::TCon(ty::Tycon { id: interner.id("Int"), kind: k_star }),
-            t_integer: @ty::TCon(ty::Tycon { id: interner.id("Integer"), kind: k_star }),
-            t_float: @ty::TCon(ty::Tycon { id: interner.id("Float"), kind: k_star }),
-            t_double: @ty::TCon(ty::Tycon { id: interner.id("Double"), kind: k_star }),
+            t_unit: @ty::TCon(ty::Tycon { id: interner.id("()") }),
+            t_char: @ty::TCon(ty::Tycon { id: interner.id("Char") }),
+            t_int: @ty::TCon(ty::Tycon { id: interner.id("Int") }),
+            t_integer: @ty::TCon(ty::Tycon { id: interner.id("Integer") }),
+            t_float: @ty::TCon(ty::Tycon { id: interner.id("Float") }),
+            t_double: @ty::TCon(ty::Tycon { id: interner.id("Double") }),
 
-            t_list: @ty::TCon(ty::Tycon { id: interner.id("[]"), kind: @ty::KFun(k_star, k_star) }),
-            t_arrow: @ty::TCon(ty::Tycon { id: interner.id("(->)"), kind: @ty::KFun(k_star, @ty::KFun(k_star, k_star)) }),
-            t_tuple2: @ty::TCon(ty::Tycon { id: interner.id("(,)"), kind: @ty::KFun(k_star, @ty::KFun(k_star, k_star)) }),
+            t_list: @ty::TCon(ty::Tycon { id: interner.id("[]") }),
+            t_arrow: @ty::TCon(ty::Tycon { id: interner.id("(->)") }),
+            t_tuple2: @ty::TCon(ty::Tycon { id: interner.id("(,)") }),
         };
+
+        let mut kinds = HashMap::new();
+        kinds.insert(interner.id("()"), k_star);
+        kinds.insert(interner.id("Char"), k_star);
+        kinds.insert(interner.id("Int"), k_star);
+        kinds.insert(interner.id("Integer"), k_star);
+        kinds.insert(interner.id("Float"), k_star);
+        kinds.insert(interner.id("Double"), k_star);
+        kinds.insert(interner.id("[]"), @ty::KFun(k_star, k_star));
+        kinds.insert(interner.id("(->)"),
+                     @ty::KFun(k_star, @ty::KFun(k_star, k_star)));
+        kinds.insert(interner.id("(,)"),
+                     @ty::KFun(k_star, @ty::KFun(k_star, k_star)));
 
         Context {
             interner: interner,
             k_star: k_star,
             types: types,
+            kinds: HashMap::new(),
         }
     }
 

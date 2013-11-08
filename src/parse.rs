@@ -31,9 +31,16 @@ fn is_digit(c: char) -> bool {
     }
 }
 
+fn is_type_start(c: char) -> bool {
+    match c {
+        'A' .. 'Z' => true,
+        _ => false
+    }
+}
+
 fn is_ident_start(c: char) -> bool {
     match c {
-        'a' .. 'z' | 'A' .. 'Z' | '_' => true,
+        'a' .. 'z' | '_' => true,
         _ => false
     }
 }
@@ -158,6 +165,14 @@ pub fn Arrow<G>() -> Parser<G,()> {
     Token("->", is_not_oper)
 }
 
+pub fn ColonColon<G>() -> Parser<G,()> {
+    Token("::", is_not_oper)
+}
+
+pub fn Semi<G>() -> Parser<G,()> {
+    Token(";", is_any)
+}
+
 pub fn Lparen<G>() -> Parser<G,()> {
     Token("(", is_any)
 }
@@ -230,9 +245,43 @@ impl<G> Parse<G,uint> for Integer1 {
 
 //////////////////////////////////////////////////////////////////////////////
 
+struct TypeName1;
+
+pub fn TypeName<G>() -> Parser<G,intern::Id> {
+    obj(TypeName1)
+}
+
+impl<G> Parse<G,intern::Id> for TypeName1 {
+    fn parse(&self,
+             _: &G,
+             cx: &mut Context,
+             input: &[u8],
+             start: uint)
+             -> ParseError<(uint, intern::Id)> {
+        let mut buf = ~"";
+        let start = skip_whitespace(input, start);
+
+        if start == input.len() {
+            return Err(start);
+        }
+
+        let c0 = input[start] as char;
+        if !is_type_start(c0) {
+            return Err(start);
+        }
+
+        buf.push_char(c0);
+        let end = accumulate(&mut buf, input, start+1, is_ident_cont);
+        let id = cx.interner.id(buf);
+        Ok((end, id))
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
 struct Ident1;
 
-fn Ident<G>() -> Parser<G,intern::Id> {
+pub fn Ident<G>() -> Parser<G,intern::Id> {
     obj(Ident1)
 }
 

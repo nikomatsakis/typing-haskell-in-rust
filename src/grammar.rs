@@ -1,4 +1,5 @@
 use cx::Context;
+use intern::Id;
 use ty;
 use parse::*;
 
@@ -8,7 +9,7 @@ pub struct Grammar {
 
 impl Grammar {
     pub fn new() -> Grammar {
-        Grammar { kind: KindDef() }
+        Grammar { kind: MkKind() }
     }
 }
 
@@ -29,7 +30,7 @@ fn Kind() -> GParser<@ty::Kind> {
     }
 }
 
-fn KindDef() -> GParser<@ty::Kind> {
+fn MkKind() -> GParser<@ty::Kind> {
     return Choice(~[ k1().then(Arrow().thenr(k1()).rep(1)).map(mk_kfun),
                      k1() ]);
 
@@ -58,9 +59,42 @@ fn KindDef() -> GParser<@ty::Kind> {
 }
 
 #[test]
-fn parse_kind() {
+fn parse_kind_star() {
     let k = Kind();
     test(Grammar::new(), "*", &k, "*");
+}
+
+#[test]
+fn parse_kind_star_arrow_star_arrow_star() {
+    let k = Kind();
     test(Grammar::new(), "* -> * -> *", &k, "(* -> (* -> *))");
+}
+
+#[test]
+fn parse_kind_paren() {
+    let k = Kind();
     test(Grammar::new(), "(* -> *) -> *", &k, "((* -> *) -> *)");
+}
+
+///////////////////////////////////////////////////////////////////////////
+// KindDef
+
+fn KindDef() -> GParser<ty::KindDef> {
+    let c = Choice(~[
+            Ident().thenl(ColonColon()).then(Kind()).thenl(Semi()),
+            TypeName().thenl(ColonColon()).then(Kind()).thenl(Semi()) ]);
+    return c.map(mk);
+
+    fn mk((id, kind): (Id, @ty::Kind)) -> ty::KindDef {
+        ty::KindDef { id: id, kind: kind }
+    }
+}
+
+#[test]
+fn parse_kind_def() {
+    let k = KindDef().rep(1);
+    test(Grammar::new(),
+         "a :: * -> *; Box :: *;",
+         &k,
+         "[a :: (* -> *),Box :: *]");
 }

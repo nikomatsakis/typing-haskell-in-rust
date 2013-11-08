@@ -1,6 +1,6 @@
 use cx;
 
-#[deriving(Eq,Clone)]
+#[deriving(Eq,Clone,IterBytes)]
 pub struct Id {
     repr: uint // index into context's identifiers list
 }
