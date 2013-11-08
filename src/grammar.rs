@@ -62,4 +62,5 @@ fn parse_kind() {
     let k = Kind();
     test(Grammar::new(), "*", &k, "*");
     test(Grammar::new(), "* -> * -> *", &k, "(* -> (* -> *))");
+    test(Grammar::new(), "(* -> *) -> *", &k, "((* -> *) -> *)");
 }
