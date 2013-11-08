@@ -1,36 +1,8 @@
+use cx;
+use cx::Context;
 use err;
 use err::Fallible;
-
-pub struct Context {
-    interner: Interner,
-    k_star: @Kind,
-    types: StandardTypes,
-}
-
-pub struct Interner {
-    identifiers: ~[~str],
-}
-
-pub struct StandardTypes {
-    t_unit: @Type,
-    t_char: @Type,
-    t_int: @Type,
-    t_integer: @Type,
-    t_float: @Type,
-    t_double: @Type,
-    t_list: @Type,
-    t_arrow: @Type,
-    t_tuple2: @Type,
-}
-
-#[deriving(Eq,Clone)]
-pub struct Id {
-    repr: uint // index into context's identifiers list
-}
-
-fn Id(u: uint) -> Id {
-    Id { repr: u }
-}
+use intern::Id;
 
 #[deriving(Eq)]
 pub enum Kind {
@@ -58,87 +30,16 @@ pub struct Tycon {
     kind: @Kind
 }
 
-impl Interner {
-    pub fn new() -> Interner {
-        Interner {
-            identifiers: ~[]
-        }
-    }
-
-    pub fn id(&mut self, s: &str) -> Id {
-        match self.identifiers.iter().enumerate().find(|&(_,p)| p.slice(0, p.len()) == s) {
-            Some((i,_)) => Id(i),
-            None => {
-                self.identifiers.push(s.to_owned());
-                Id(self.identifiers.len() - 1)
-            }
-        }
-    }
-
-    pub fn int_identifier(&mut self, i: uint) -> Id {
-        self.id(format!("{}", i))
-    }
-}
-
-impl Context {
-    pub fn new() -> Context {
-        let mut interner = Interner::new();
-
-        let k_star = @Star;
-
-        let types = StandardTypes {
-            t_unit: @TCon(Tycon { id: interner.id("()"), kind: k_star }),
-            t_char: @TCon(Tycon { id: interner.id("Char"), kind: k_star }),
-            t_int: @TCon(Tycon { id: interner.id("Int"), kind: k_star }),
-            t_integer: @TCon(Tycon { id: interner.id("Integer"), kind: k_star }),
-            t_float: @TCon(Tycon { id: interner.id("Float"), kind: k_star }),
-            t_double: @TCon(Tycon { id: interner.id("Double"), kind: k_star }),
-
-            t_list: @TCon(Tycon { id: interner.id("[]"), kind: @KFun(k_star, k_star) }),
-            t_arrow: @TCon(Tycon { id: interner.id("(->)"), kind: @KFun(k_star, @KFun(k_star, k_star)) }),
-            t_tuple2: @TCon(Tycon { id: interner.id("(,)"), kind: @KFun(k_star, @KFun(k_star, k_star)) }),
-        };
-
-        Context {
-            interner: interner,
-            k_star: k_star,
-            types: types
-        }
-    }
-
-    fn func(&self, input: @Type, output: @Type) -> @Type {
-        @TAp(@TAp(self.types.t_arrow, input), output)
-    }
-
-    fn list(&self, elem: @Type) -> @Type {
-        @TAp(self.types.t_list, elem)
-    }
-
-    fn pair(&self, a: @Type, b: @Type) -> @Type {
-        @TAp(@TAp(self.types.t_tuple2, a), b)
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////
 // Strings
 
-pub trait Describe {
-    fn mk_str(&self, cx: &Context) -> ~str {
-        let mut s = ~"";
-        self.describe(cx, &mut s);
-        s
-    }
-
-    fn describe(&self, cx: &Context, out: &mut ~str);
-}
-
-impl Describe for uint {
+impl cx::Describe for uint {
     fn describe(&self, _: &Context, out: &mut ~str) {
         out.push_str(format!("{}", *self));
     }
 }
 
-impl Describe for Type {
+impl cx::Describe for Type {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         match *self {
             TVar(ref tv) => tv.describe(cx, out),
@@ -157,26 +58,20 @@ impl Describe for Type {
     }
 }
 
-impl Describe for Tycon {
+impl cx::Describe for Tycon {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         self.id.describe(cx, out);
     }
 }
 
-impl Describe for Tyvar {
+impl cx::Describe for Tyvar {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         out.push_str("'");
         self.id.describe(cx, out);
     }
 }
 
-impl Describe for Id {
-    fn describe(&self, cx: &Context, out: &mut ~str) {
-        out.push_str(cx.interner.identifiers[self.repr]);
-    }
-}
-
-impl<D:Describe> Describe for ~[D] {
+impl<D:cx::Describe> cx::Describe for ~[D] {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         let mut comma = false;
         out.push_char('[');

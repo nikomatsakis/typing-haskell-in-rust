@@ -1,14 +1,14 @@
+use cx::{Context, Describe};
+use intern;
 use std::uint;
 use ty;
-use ty::Context;
-use ty::Describe;
 
 //////////////////////////////////////////////////////////////////////////////
 // Simple parser combinator interface
 
 pub trait Parse<T> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, T)>;
@@ -18,7 +18,7 @@ pub type ParseError<T> = Result<T, uint>;
 
 pub type Parser<T> = ~Parse:'static<T>;
 
-fn obj<T,R:'static+Parse<T>>(r: R) -> Parser<T> {
+pub fn obj<T,R:'static+Parse<T>>(r: R) -> Parser<T> {
     ~r as Parser<T>
 }
 
@@ -38,6 +38,10 @@ fn is_ident_start(c: char) -> bool {
     }
 }
 
+fn is_not_ident_start(c: char) -> bool {
+    !is_ident_start(c)
+}
+
 fn is_ident_cont(c: char) -> bool {
     match c {
         '0' .. '9' | 'a' .. 'z' | 'A' .. 'Z' | '_' => true,
@@ -49,6 +53,21 @@ fn is_oper(c: char) -> bool {
     match c {
         '+' | '-' | '>' | '<' | '*' | '/' => true,
         _ => false
+    }
+}
+
+fn is_any(c: char) -> bool {
+    true
+}
+
+fn is_not_oper(c: char) -> bool {
+    !is_oper(c)
+}
+
+fn is_whitespace(c: char) -> bool {
+    match c {
+        ' ' | '\t' | '\n' | '\r' => true,
+        _ => false,
     }
 }
 
@@ -72,14 +91,8 @@ fn accumulate(buf: &mut ~str,
 
 fn skip_whitespace(input: &[u8], start: uint) -> uint {
     let mut i = start;
-    while i < input.len() {
-        match input[i] as char {
-            ' ' => { i += 1; }
-            '\t' => { i += 1; }
-            '\n' => { i += 1; }
-            '\r' => { i += 1; }
-            _ => { break; }
-        }
+    while i < input.len() && is_whitespace(input[i] as char) {
+        i += 1;
     }
     i
 }
@@ -94,11 +107,64 @@ fn Nothing() -> Parser<()> {
 
 impl Parse<()> for Nothing1 {
     fn parse(&self,
-             _: &mut ty::Context,
+             _: &mut Context,
              _: &[u8],
              start: uint)
              -> ParseError<(uint, ())> {
         Ok((start, ()))
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+struct Token {
+    str: &'static str,
+    term: Fn<char, bool>
+}
+
+pub fn Token(s: &'static str, term: Fn<char, bool>) -> Parser<()> {
+    obj(Token { str: s, term: term })
+}
+
+pub fn Star() -> Parser<()> {
+    Token("*", is_not_oper)
+}
+
+pub fn Arrow() -> Parser<()> {
+    Token("->", is_not_oper)
+}
+
+pub fn Lparen() -> Parser<()> {
+    Token("(", is_any)
+}
+
+pub fn Rparen() -> Parser<()> {
+    Token(")", is_any)
+}
+
+impl Parse<()> for Token {
+    fn parse(&self,
+             _: &mut Context,
+             input: &[u8],
+             start: uint)
+             -> Result<(uint, ()), uint> {
+        let start = skip_whitespace(input, start);
+        let bytes = self.str.as_bytes();
+        let end = start + bytes.len();
+
+        if end > input.len() {
+            return Err(start);
+        }
+
+        if input.slice(start, end) != bytes {
+            return Err(start);
+        }
+
+        if end == input.len() || (self.term)(input[end] as char) {
+            return Ok((end, ()));
+        }
+
+        return Err(start);
     }
 }
 
@@ -112,7 +178,7 @@ fn Integer() -> Parser<uint> {
 
 impl Parse<uint> for Integer1 {
     fn parse(&self,
-             _: &mut ty::Context,
+             _: &mut Context,
              input: &[u8],
              start: uint)
              -> Result<(uint, uint), uint> {
@@ -140,16 +206,16 @@ impl Parse<uint> for Integer1 {
 
 struct Ident1;
 
-fn Ident() -> Parser<ty::Id> {
+fn Ident() -> Parser<intern::Id> {
     obj(Ident1)
 }
 
-impl Parse<ty::Id> for Ident1 {
+impl Parse<intern::Id> for Ident1 {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
-             -> ParseError<(uint, ty::Id)> {
+             -> ParseError<(uint, intern::Id)> {
         let mut buf = ~"";
         let start = skip_whitespace(input, start);
 
@@ -197,7 +263,7 @@ pub fn Repeat<T>(sub: Parser<T>, min: uint) -> Parser<~[T]> {
 
 impl<T> Parse<~[T]> for Repeat<T> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, ~[T])> {
@@ -225,25 +291,34 @@ impl<T> Parse<~[T]> for Repeat<T> {
 // Map: Parse then apply a (bare) fn.
 
 type Fn<T,U> = extern "Rust" fn(T) -> U;
+type CxFn<T,U> = extern "Rust" fn(&mut Context, T) -> U;
 
 pub struct Map<T,U> {
     sub: Parser<T>,
-    f: Fn<T,U>
+    f: Either<Fn<T,U>, CxFn<T,U>>
 }
 
 pub fn Map<T,U>(sub: Parser<T>, f: Fn<T,U>) -> Parser<U> {
-    obj(Map { sub: sub, f: f })
+    obj(Map { sub: sub, f: Left(f) })
+}
+
+pub fn MapCx<T,U>(sub: Parser<T>, f: CxFn<T,U>) -> Parser<U> {
+    obj(Map { sub: sub, f: Right(f) })
 }
 
 impl<T,U> Parse<U> for Map<T,U> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, U)> {
         match self.sub.parse(cx, input, start) {
-            Ok((end, v)) => {
-                Ok((end, (self.f)(v)))
+            Ok((end, t)) => {
+                let u = match self.f {
+                    Left(f) => f(t),
+                    Right(f) => f(cx, t),
+                };
+                Ok((end, u))
             }
             Err(e) => {
                 Err(e)
@@ -269,7 +344,7 @@ pub fn Choice2<T>(left: Parser<T>, right: Parser<T>) -> Parser<T> {
 
 impl<T> Parse<T> for Choice<T> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, T)> {
@@ -302,7 +377,7 @@ pub fn Tuple<T,U>(first: Parser<T>, second: Parser<U>) -> Parser<(T,U)> {
 
 impl<T,U> Parse<(T,U)> for Tuple<T,U> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, (T,U))> {
@@ -311,42 +386,6 @@ impl<T,U> Parse<(T,U)> for Tuple<T,U> {
                 match self.second.parse(cx, input, start) {
                     Ok((end, b)) => {
                         Ok((end, (a,b)))
-                    }
-                    Err(e) => {
-                        Err(e)
-                    }
-                }
-            }
-            Err(e) => {
-                Err(e)
-            }
-        }
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// Predicate: Parses with `first` then `second`, ignoring result of `first`.
-
-pub struct Predicate<T,U> {
-    first: Parser<T>,
-    second: Parser<U>
-}
-
-pub fn Predicate<T,U>(first: Parser<T>, second: Parser<U>) -> Parser<U> {
-    obj(Predicate { first: first, second: second })
-}
-
-impl<T,U> Parse<U> for Predicate<T,U> {
-    fn parse(&self,
-             cx: &mut ty::Context,
-             input: &[u8],
-             start: uint)
-             -> ParseError<(uint, U)> {
-        match self.first.parse(cx, input, start) {
-            Ok((_, _)) => {
-                match self.second.parse(cx, input, start) {
-                    Ok((end, b)) => {
-                        Ok((end, b))
                     }
                     Err(e) => {
                         Err(e)
@@ -377,7 +416,7 @@ pub fn PostPredicate<T,U>(first: Parser<T>,
 
 impl<T,U> Parse<T> for PostPredicate<T,U> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, T)> {
@@ -412,7 +451,7 @@ pub fn Not<T>(test: Parser<T>) -> Parser<()> {
 
 impl<T> Parse<()> for Not<T> {
     fn parse(&self,
-             cx: &mut ty::Context,
+             cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, ())> {
@@ -430,13 +469,18 @@ impl<T> Parse<()> for Not<T> {
 //////////////////////////////////////////////////////////////////////////////
 // Convenient methods
 
+fn first<T,U>((x, _): (T,U)) -> T { x }
+fn second<T,U>((_, x): (T,U)) -> U { x }
+
 pub trait Convenience<T> {
     fn rep(self, min: uint) -> Parser<~[T]>;
     fn star(self) -> Parser<~[T]>;
     fn plus(self) -> Parser<~[T]>;
-    fn seq<U>(self, u: Parser<U>) -> Parser<(T,U)>;
-    fn then<U>(self, u: Parser<U>) -> Parser<U>;
+    fn then<U>(self, u: Parser<U>) -> Parser<(T,U)>;
+    fn thenl<U>(self, u: Parser<U>) -> Parser<T>;
+    fn thenr<U>(self, u: Parser<U>) -> Parser<U>;
     fn map<U>(self, f: Fn<T,U>) -> Parser<U>;
+    fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<U>;
     fn test<U>(self, p: Parser<U>) -> Parser<T>;
 }
 
@@ -453,16 +497,24 @@ impl<T> Convenience<T> for Parser<T> {
         Repeat(self, 1)
     }
 
-    fn seq<U>(self, u: Parser<U>) -> Parser<(T,U)> {
+    fn then<U>(self, u: Parser<U>) -> Parser<(T,U)> {
         Tuple(self, u)
     }
 
-    fn then<U>(self, u: Parser<U>) -> Parser<U> {
-        Predicate(self, u)
+    fn thenl<U>(self, u: Parser<U>) -> Parser<T> {
+        Tuple(self, u).map(first)
+    }
+
+    fn thenr<U>(self, u: Parser<U>) -> Parser<U> {
+        Tuple(self, u).map(second)
     }
 
     fn map<U>(self, f: Fn<T,U>) -> Parser<U> {
         Map(self, f)
+    }
+
+    fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<U> {
+        MapCx(self, f)
     }
 
     fn test<U>(self, p: Parser<U>) -> Parser<T> {
@@ -472,7 +524,7 @@ impl<T> Convenience<T> for Parser<T> {
 
 //////////////////////////////////////////////////////////////////////////////
 
-pub fn parse<T>(cx: &mut ty::Context,
+pub fn parse<T>(cx: &mut Context,
                 text: &[u8],
                 parser: &Parser<T>)
                 -> ParseError<T> {
@@ -544,9 +596,9 @@ fn digits() {
 
 #[test]
 fn idents_or_digits() {
-    pub enum Choice { IsIdent(ty::Id), IsNumber(uint) }
+    pub enum Choice { IsIdent(intern::Id), IsNumber(uint) }
 
-    impl ty::Describe for Choice {
+    impl Describe for Choice {
         fn describe(&self, cx: &Context, out: &mut ~str) {
             match *self {
                 IsIdent(i) => i.describe(cx, out),

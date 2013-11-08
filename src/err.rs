@@ -1,7 +1,8 @@
 use ty;
+use intern;
 
 pub enum Err {
-    DuplicateBindings(ty::Id),
+    DuplicateBindings(intern::Id),
     MismatchedTypes(@ty::Type, @ty::Type),
     OccursCheck(ty::Tyvar, @ty::Type),
     KindCheck(ty::Tyvar, @ty::Type),
