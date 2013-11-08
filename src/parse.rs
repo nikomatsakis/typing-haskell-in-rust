@@ -6,8 +6,9 @@ use ty;
 //////////////////////////////////////////////////////////////////////////////
 // Simple parser combinator interface
 
-pub trait Parse<T> {
+pub trait Parse<G,T> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
@@ -16,10 +17,10 @@ pub trait Parse<T> {
 
 pub type ParseError<T> = Result<T, uint>;
 
-pub type Parser<T> = ~Parse:'static<T>;
+pub type Parser<G,T> = ~Parse:'static<G,T>;
 
-pub fn obj<T,R:'static+Parse<T>>(r: R) -> Parser<T> {
-    ~r as Parser<T>
+pub fn obj<G,T,R:'static+Parse<G,T>>(r: R) -> Parser<G,T> {
+    ~r as Parser<G,T>
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -101,12 +102,13 @@ fn skip_whitespace(input: &[u8], start: uint) -> uint {
 
 struct Nothing1;
 
-fn Nothing() -> Parser<()> {
+fn Nothing<G>() -> Parser<G,()> {
     obj(Nothing1)
 }
 
-impl Parse<()> for Nothing1 {
+impl<G> Parse<G,()> for Nothing1 {
     fn parse(&self,
+             _: &G,
              _: &mut Context,
              _: &[u8],
              start: uint)
@@ -122,28 +124,29 @@ struct Token {
     term: Fn<char, bool>
 }
 
-pub fn Token(s: &'static str, term: Fn<char, bool>) -> Parser<()> {
+pub fn Token<G>(s: &'static str, term: Fn<char, bool>) -> Parser<G,()> {
     obj(Token { str: s, term: term })
 }
 
-pub fn Star() -> Parser<()> {
+pub fn Star<G>() -> Parser<G,()> {
     Token("*", is_not_oper)
 }
 
-pub fn Arrow() -> Parser<()> {
+pub fn Arrow<G>() -> Parser<G,()> {
     Token("->", is_not_oper)
 }
 
-pub fn Lparen() -> Parser<()> {
+pub fn Lparen<G>() -> Parser<G,()> {
     Token("(", is_any)
 }
 
-pub fn Rparen() -> Parser<()> {
+pub fn Rparen<G>() -> Parser<G,()> {
     Token(")", is_any)
 }
 
-impl Parse<()> for Token {
+impl<G> Parse<G,()> for Token {
     fn parse(&self,
+             _: &G,
              _: &mut Context,
              input: &[u8],
              start: uint)
@@ -172,12 +175,13 @@ impl Parse<()> for Token {
 
 struct Integer1;
 
-fn Integer() -> Parser<uint> {
+fn Integer<G>() -> Parser<G,uint> {
     obj(Integer1)
 }
 
-impl Parse<uint> for Integer1 {
+impl<G> Parse<G,uint> for Integer1 {
     fn parse(&self,
+             _: &G,
              _: &mut Context,
              input: &[u8],
              start: uint)
@@ -206,12 +210,13 @@ impl Parse<uint> for Integer1 {
 
 struct Ident1;
 
-fn Ident() -> Parser<intern::Id> {
+fn Ident<G>() -> Parser<G,intern::Id> {
     obj(Ident1)
 }
 
-impl Parse<intern::Id> for Ident1 {
+impl<G> Parse<G,intern::Id> for Ident1 {
     fn parse(&self,
+             _: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
@@ -252,17 +257,18 @@ impl Parse<intern::Id> for Ident1 {
 //////////////////////////////////////////////////////////////////////////////
 // Repeat: Parse over and over.
 
-pub struct Repeat<T> {
-    sub: Parser<T>,
+pub struct Repeat<G,T> {
+    sub: Parser<G,T>,
     min: uint
 }
 
-pub fn Repeat<T>(sub: Parser<T>, min: uint) -> Parser<~[T]> {
+pub fn Repeat<G,T>(sub: Parser<G,T>, min: uint) -> Parser<G,~[T]> {
     obj(Repeat { sub: sub, min: min })
 }
 
-impl<T> Parse<~[T]> for Repeat<T> {
+impl<G,T> Parse<G,~[T]> for Repeat<G,T> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
@@ -270,7 +276,7 @@ impl<T> Parse<~[T]> for Repeat<T> {
         let mut pos = start;
         let mut result = ~[];
         loop {
-            match self.sub.parse(cx, input, pos) {
+            match self.sub.parse(grammar, cx, input, pos) {
                 Ok((end, v)) => {
                     result.push(v);
                     pos = end;
@@ -293,26 +299,27 @@ impl<T> Parse<~[T]> for Repeat<T> {
 type Fn<T,U> = extern "Rust" fn(T) -> U;
 type CxFn<T,U> = extern "Rust" fn(&mut Context, T) -> U;
 
-pub struct Map<T,U> {
-    sub: Parser<T>,
+pub struct Map<G,T,U> {
+    sub: Parser<G,T>,
     f: Either<Fn<T,U>, CxFn<T,U>>
 }
 
-pub fn Map<T,U>(sub: Parser<T>, f: Fn<T,U>) -> Parser<U> {
+pub fn Map<G,T,U>(sub: Parser<G,T>, f: Fn<T,U>) -> Parser<G,U> {
     obj(Map { sub: sub, f: Left(f) })
 }
 
-pub fn MapCx<T,U>(sub: Parser<T>, f: CxFn<T,U>) -> Parser<U> {
+pub fn MapCx<G,T,U>(sub: Parser<G,T>, f: CxFn<T,U>) -> Parser<G,U> {
     obj(Map { sub: sub, f: Right(f) })
 }
 
-impl<T,U> Parse<U> for Map<T,U> {
+impl<G,T,U> Parse<G,U> for Map<G,T,U> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, U)> {
-        match self.sub.parse(cx, input, start) {
+        match self.sub.parse(grammar, cx, input, start) {
             Ok((end, t)) => {
                 let u = match self.f {
                     Left(f) => f(t),
@@ -330,27 +337,28 @@ impl<T,U> Parse<U> for Map<T,U> {
 //////////////////////////////////////////////////////////////////////////////
 // Choice: Tries many parsers in turn.
 
-pub struct Choice<T> {
-    choices: ~[Parser<T>]
+pub struct Choice<G,T> {
+    choices: ~[Parser<G,T>]
 }
 
-pub fn Choice<T>(choices: ~[Parser<T>]) -> Parser<T> {
+pub fn Choice<G,T>(choices: ~[Parser<G,T>]) -> Parser<G,T> {
     obj(Choice { choices: choices })
 }
 
-pub fn Choice2<T>(left: Parser<T>, right: Parser<T>) -> Parser<T> {
+pub fn Choice2<G,T>(left: Parser<G,T>, right: Parser<G,T>) -> Parser<G,T> {
     Choice(~[left, right])
 }
 
-impl<T> Parse<T> for Choice<T> {
+impl<G,T> Parse<G,T> for Choice<G,T> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, T)> {
         let mut farthest = start;
         for choice in self.choices.iter() {
-            match choice.parse(cx, input, start) {
+            match choice.parse(grammar, cx, input, start) {
                 Ok((end, v)) => {
                     return Ok((end, v));
                 }
@@ -366,24 +374,25 @@ impl<T> Parse<T> for Choice<T> {
 //////////////////////////////////////////////////////////////////////////////
 // Tuple: Parses with `first` then `second`, returning tuple of results.
 
-pub struct Tuple<T,U> {
-    first: Parser<T>,
-    second: Parser<U>
+pub struct Tuple<G,T,U> {
+    first: Parser<G,T>,
+    second: Parser<G,U>
 }
 
-pub fn Tuple<T,U>(first: Parser<T>, second: Parser<U>) -> Parser<(T,U)> {
+pub fn Tuple<G,T,U>(first: Parser<G,T>, second: Parser<G,U>) -> Parser<G,(T,U)> {
     obj(Tuple { first: first, second: second })
 }
 
-impl<T,U> Parse<(T,U)> for Tuple<T,U> {
+impl<G,T,U> Parse<G,(T,U)> for Tuple<G,T,U> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, (T,U))> {
-        match self.first.parse(cx, input, start) {
+        match self.first.parse(grammar, cx, input, start) {
             Ok((_, a)) => {
-                match self.second.parse(cx, input, start) {
+                match self.second.parse(grammar, cx, input, start) {
                     Ok((end, b)) => {
                         Ok((end, (a,b)))
                     }
@@ -403,26 +412,27 @@ impl<T,U> Parse<(T,U)> for Tuple<T,U> {
 // PostPredicate: Parses with `first` then tests whether `second` can parse,
 // but result of `second` is dropped (and `second` does not consume text).
 
-pub struct PostPredicate<T,U> {
-    first: Parser<T>,
-    second: Parser<U>
+pub struct PostPredicate<G,T,U> {
+    first: Parser<G,T>,
+    second: Parser<G,U>
 }
 
-pub fn PostPredicate<T,U>(first: Parser<T>,
-                          second: Parser<U>)
-                          -> Parser<T> {
+pub fn PostPredicate<G,T,U>(first: Parser<G,T>,
+                            second: Parser<G,U>)
+                            -> Parser<G,T> {
     obj(PostPredicate { first: first, second: second })
 }
 
-impl<T,U> Parse<T> for PostPredicate<T,U> {
+impl<G,T,U> Parse<G,T> for PostPredicate<G,T,U> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, T)> {
-        match self.first.parse(cx, input, start) {
+        match self.first.parse(grammar, cx, input, start) {
             Ok((pos, a)) => {
-                match self.second.parse(cx, input, start) {
+                match self.second.parse(grammar, cx, input, start) {
                     Ok((_, _)) => {
                         Ok((pos, a))
                     }
@@ -441,21 +451,22 @@ impl<T,U> Parse<T> for PostPredicate<T,U> {
 //////////////////////////////////////////////////////////////////////////////
 // Not: Succeeds if `test` fails. Consumes nothing.
 
-pub struct Not<T> {
-    test: Parser<T>,
+pub struct Not<G,T> {
+    test: Parser<G,T>,
 }
 
-pub fn Not<T>(test: Parser<T>) -> Parser<()> {
+pub fn Not<G,T>(test: Parser<G,T>) -> Parser<G,()> {
     obj(Not { test: test })
 }
 
-impl<T> Parse<()> for Not<T> {
+impl<G,T> Parse<G,()> for Not<G,T> {
     fn parse(&self,
+             grammar: &G,
              cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, ())> {
-        match self.test.parse(cx, input, start) {
+        match self.test.parse(grammar, cx, input, start) {
             Ok((pos, _)) => {
                 Err(pos)
             }
@@ -472,63 +483,64 @@ impl<T> Parse<()> for Not<T> {
 fn first<T,U>((x, _): (T,U)) -> T { x }
 fn second<T,U>((_, x): (T,U)) -> U { x }
 
-pub trait Convenience<T> {
-    fn rep(self, min: uint) -> Parser<~[T]>;
-    fn star(self) -> Parser<~[T]>;
-    fn plus(self) -> Parser<~[T]>;
-    fn then<U>(self, u: Parser<U>) -> Parser<(T,U)>;
-    fn thenl<U>(self, u: Parser<U>) -> Parser<T>;
-    fn thenr<U>(self, u: Parser<U>) -> Parser<U>;
-    fn map<U>(self, f: Fn<T,U>) -> Parser<U>;
-    fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<U>;
-    fn test<U>(self, p: Parser<U>) -> Parser<T>;
+pub trait Convenience<G,T> {
+    fn rep(self, min: uint) -> Parser<G,~[T]>;
+    fn star(self) -> Parser<G,~[T]>;
+    fn plus(self) -> Parser<G,~[T]>;
+    fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)>;
+    fn thenl<U>(self, u: Parser<G,U>) -> Parser<G,T>;
+    fn thenr<U>(self, u: Parser<G,U>) -> Parser<G,U>;
+    fn map<U>(self, f: Fn<T,U>) -> Parser<G,U>;
+    fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<G,U>;
+    fn test<U>(self, p: Parser<G,U>) -> Parser<G,T>;
 }
 
-impl<T> Convenience<T> for Parser<T> {
-    fn rep(self, min: uint) -> Parser<~[T]> {
+impl<G,T> Convenience<G,T> for Parser<G,T> {
+    fn rep(self, min: uint) -> Parser<G,~[T]> {
         Repeat(self, min)
     }
 
-    fn star(self) -> Parser<~[T]> {
+    fn star(self) -> Parser<G,~[T]> {
         Repeat(self, 0)
     }
 
-    fn plus(self) -> Parser<~[T]> {
+    fn plus(self) -> Parser<G,~[T]> {
         Repeat(self, 1)
     }
 
-    fn then<U>(self, u: Parser<U>) -> Parser<(T,U)> {
+    fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)> {
         Tuple(self, u)
     }
 
-    fn thenl<U>(self, u: Parser<U>) -> Parser<T> {
+    fn thenl<U>(self, u: Parser<G,U>) -> Parser<G,T> {
         Tuple(self, u).map(first)
     }
 
-    fn thenr<U>(self, u: Parser<U>) -> Parser<U> {
+    fn thenr<U>(self, u: Parser<G,U>) -> Parser<G,U> {
         Tuple(self, u).map(second)
     }
 
-    fn map<U>(self, f: Fn<T,U>) -> Parser<U> {
+    fn map<U>(self, f: Fn<T,U>) -> Parser<G,U> {
         Map(self, f)
     }
 
-    fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<U> {
+    fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<G,U> {
         MapCx(self, f)
     }
 
-    fn test<U>(self, p: Parser<U>) -> Parser<T> {
+    fn test<U>(self, p: Parser<G,U>) -> Parser<G,T> {
         PostPredicate(self, p)
     }
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-pub fn parse<T>(cx: &mut Context,
-                text: &[u8],
-                parser: &Parser<T>)
-                -> ParseError<T> {
-    match parser.parse(cx, text, 0) {
+pub fn parse<G,T>(grammar: &G,
+                  cx: &mut Context,
+                  text: &[u8],
+                  parser: &Parser<G,T>)
+                  -> ParseError<T> {
+    match parser.parse(grammar, cx, text, 0) {
         Err(e) => Err(e),
         Ok((end, v)) => {
             let end1 = skip_whitespace(text, end);
@@ -546,11 +558,11 @@ pub fn parse<T>(cx: &mut Context,
 
 #[cfg(test)]
 fn test<T:Describe>(text: &'static str,
-                    parser: &Parser<T>,
+                    parser: &Parser<(),T>,
                     expected: &'static str) {
     let bytes = text.as_bytes();
     let mut cx = Context::new();
-    match parse(&mut cx, bytes, parser) {
+    match parse(&(), &mut cx, bytes, parser) {
         Err(idx) => {
             fail!(format!("Parse error at index {}", idx))
         }
@@ -563,11 +575,11 @@ fn test<T:Describe>(text: &'static str,
 
 #[cfg(test)]
 fn test_err<T:Describe>(text: &'static str,
-                        parser: &Parser<T>,
+                        parser: &Parser<(),T>,
                         expected: uint) {
     let bytes = text.as_bytes();
     let mut cx = Context::new();
-    match parse(&mut cx, bytes, parser) {
+    match parse(&(), &mut cx, bytes, parser) {
         Err(index) => {
             assert_eq!(index, expected);
         }

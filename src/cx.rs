@@ -2,13 +2,11 @@
 
 use ty;
 use intern;
-use grammar;
 
 pub struct Context {
     interner: intern::Interner,
     k_star: @ty::Kind,
     types: StandardTypes,
-    grammar: grammar::Grammar,
 }
 
 pub struct StandardTypes {
@@ -46,7 +44,6 @@ impl Context {
             interner: interner,
             k_star: k_star,
             types: types,
-            grammar: grammar::Grammar::new(),
         }
     }
 

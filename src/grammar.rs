@@ -4,7 +4,7 @@ use ty;
 use parse::*;
 
 pub struct Grammar {
-    kind: Parser<@ty::Kind>,
+    kind: GParser<@ty::Kind>,
 }
 
 impl Grammar {
@@ -12,6 +12,8 @@ impl Grammar {
         Grammar { kind: KindDef() }
     }
 }
+
+type GParser<T> = Parser<Grammar, T>;
 
 ///////////////////////////////////////////////////////////////////////////
 
@@ -22,21 +24,22 @@ fn managed<T:'static>(t: T) -> @T { @t }
 
 struct Kind1;
 
-fn Kind() -> Parser<@ty::Kind> {
-    ~Kind1 as Parser<@ty::Kind>
+fn Kind() -> GParser<@ty::Kind> {
+    ~Kind1 as GParser<@ty::Kind>
 }
 
-impl Parse<@ty::Kind> for Kind1 {
+impl Parse<Grammar,@ty::Kind> for Kind1 {
     fn parse(&self,
+             grammar: &Grammar,
              cx: &mut Context,
              input: &[u8],
              start: uint)
              -> ParseError<(uint, @ty::Kind)> {
-        cx.grammar.kind.parse(cx, input, start)
+        grammar.kind.parse(grammar, cx, input, start)
     }
 }
 
-fn KindDef() -> Parser<@ty::Kind> {
+fn KindDef() -> GParser<@ty::Kind> {
     return Choice(~[ k1().then(Arrow().thenr(k1()).rep(1)).map(mk_kfun),
                      k1() ]);
 
@@ -44,7 +47,7 @@ fn KindDef() -> Parser<@ty::Kind> {
         cx.k_star
     }
 
-    fn k1() -> Parser<@ty::Kind> {
+    fn k1() -> GParser<@ty::Kind> {
         Choice(~[ Star().map_cx(mk_star),
                   Lparen().thenr(Kind()).thenl(Rparen()) ])
     }
