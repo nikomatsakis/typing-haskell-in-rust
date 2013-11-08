@@ -70,3 +70,50 @@ pub trait Describe {
 
     fn describe(&self, cx: &Context, out: &mut ~str);
 }
+
+impl Describe for () {
+    fn describe(&self, _: &Context, out: &mut ~str) {
+        out.push_str("()")
+    }
+}
+
+impl Describe for uint {
+    fn describe(&self, _: &Context, out: &mut ~str) {
+        out.push_str(format!("{}", *self));
+    }
+}
+
+impl<T:Describe> Describe for @T {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        let &@ref this = self;
+        this.describe(cx, out);
+    }
+}
+
+impl<D:Describe> Describe for ~[D] {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        let mut comma = false;
+        out.push_char('[');
+        for item in self.iter() {
+            if comma { out.push_char(','); }
+            item.describe(cx, out);
+            comma = true;
+        }
+        out.push_char(']');
+    }
+}
+
+impl<D:Describe,E:Describe> Describe for (D,E) {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        let (ref d, ref e) = *self;
+
+        out.push_char('(');
+        d.describe(cx, out);
+        out.push_char(',');
+        e.describe(cx, out);
+        out.push_char(')');
+    }
+}
+
+
+

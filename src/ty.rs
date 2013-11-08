@@ -33,19 +33,6 @@ pub struct Tycon {
 ///////////////////////////////////////////////////////////////////////////
 // Strings
 
-impl<T:cx::Describe> cx::Describe for @T {
-    fn describe(&self, cx: &Context, out: &mut ~str) {
-        let &@ref this = self;
-        this.describe(cx, out);
-    }
-}
-
-impl cx::Describe for uint {
-    fn describe(&self, _: &Context, out: &mut ~str) {
-        out.push_str(format!("{}", *self));
-    }
-}
-
 impl cx::Describe for Type {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         match *self {
@@ -92,19 +79,6 @@ impl cx::Describe for Tyvar {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         out.push_str("'");
         self.id.describe(cx, out);
-    }
-}
-
-impl<D:cx::Describe> cx::Describe for ~[D] {
-    fn describe(&self, cx: &Context, out: &mut ~str) {
-        let mut comma = false;
-        out.push_char('[');
-        for item in self.iter() {
-            if comma { out.push_char(','); }
-            item.describe(cx, out);
-            comma = true;
-        }
-        out.push_char(']');
     }
 }
 

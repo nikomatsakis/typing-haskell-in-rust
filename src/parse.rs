@@ -1,7 +1,6 @@
 use cx::{Context, Describe};
 use intern;
 use std::uint;
-use ty;
 
 //////////////////////////////////////////////////////////////////////////////
 // Simple parser combinator interface
@@ -57,7 +56,7 @@ fn is_oper(c: char) -> bool {
     }
 }
 
-fn is_any(c: char) -> bool {
+fn is_any(_: char) -> bool {
     true
 }
 
@@ -114,6 +113,29 @@ impl<G> Parse<G,()> for Nothing1 {
              start: uint)
              -> ParseError<(uint, ())> {
         Ok((start, ()))
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+
+type RefFn<G,T> = extern "Rust" fn<'a>(g: &'a G) -> &'a Parser<G,T>;
+
+struct Ref<G,T> {
+    func: RefFn<G,T>
+}
+
+pub fn Ref<G,T>(func: RefFn<G,T>) -> Parser<G,T> {
+    obj(Ref {func: func})
+}
+
+impl<G,T> Parse<G,T> for Ref<G,T> {
+    fn parse(&self,
+             grammar: &G,
+             cx: &mut Context,
+             input: &[u8],
+             start: uint)
+             -> ParseError<(uint, T)> {
+        (self.func)(grammar).parse(grammar, cx, input, start)
     }
 }
 
@@ -391,8 +413,8 @@ impl<G,T,U> Parse<G,(T,U)> for Tuple<G,T,U> {
              start: uint)
              -> ParseError<(uint, (T,U))> {
         match self.first.parse(grammar, cx, input, start) {
-            Ok((_, a)) => {
-                match self.second.parse(grammar, cx, input, start) {
+            Ok((pos, a)) => {
+                match self.second.parse(grammar, cx, input, pos) {
                     Ok((end, b)) => {
                         Ok((end, (a,b)))
                     }
@@ -478,6 +500,40 @@ impl<G,T> Parse<G,()> for Not<G,T> {
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// Not: Succeeds if `test` fails. Consumes nothing.
+
+pub struct Debug<G,T> {
+    tag: ~str,
+    sub: Parser<G,T>,
+}
+
+pub fn Debug<G,T>(tag: ~str, sub: Parser<G,T>) -> Parser<G,T> {
+    obj(Debug { tag: tag, sub: sub })
+}
+
+impl<G,T> Parse<G,T> for Debug<G,T> {
+    fn parse(&self,
+             grammar: &G,
+             cx: &mut Context,
+             input: &[u8],
+             start: uint)
+             -> ParseError<(uint, T)> {
+        match self.sub.parse(grammar, cx, input, start) {
+            Ok((pos, v)) => {
+                debug2!("{}: ok  pos={} '{}' v={:?}", self.tag, pos,
+                        input[pos] as char, v);
+                Ok((pos, v))
+            }
+            Err(pos) => {
+                debug2!("{}: err pos={} '{}'", self.tag, pos,
+                        input[pos] as char);
+                Err(pos)
+            }
+        }
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // Convenient methods
 
 fn first<T,U>((x, _): (T,U)) -> T { x }
@@ -485,27 +541,18 @@ fn second<T,U>((_, x): (T,U)) -> U { x }
 
 pub trait Convenience<G,T> {
     fn rep(self, min: uint) -> Parser<G,~[T]>;
-    fn star(self) -> Parser<G,~[T]>;
-    fn plus(self) -> Parser<G,~[T]>;
     fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)>;
     fn thenl<U>(self, u: Parser<G,U>) -> Parser<G,T>;
     fn thenr<U>(self, u: Parser<G,U>) -> Parser<G,U>;
     fn map<U>(self, f: Fn<T,U>) -> Parser<G,U>;
     fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<G,U>;
     fn test<U>(self, p: Parser<G,U>) -> Parser<G,T>;
+    fn debug(self, tag: ~str) -> Parser<G,T>;
 }
 
 impl<G,T> Convenience<G,T> for Parser<G,T> {
     fn rep(self, min: uint) -> Parser<G,~[T]> {
         Repeat(self, min)
-    }
-
-    fn star(self) -> Parser<G,~[T]> {
-        Repeat(self, 0)
-    }
-
-    fn plus(self) -> Parser<G,~[T]> {
-        Repeat(self, 1)
     }
 
     fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)> {
@@ -530,6 +577,10 @@ impl<G,T> Convenience<G,T> for Parser<G,T> {
 
     fn test<U>(self, p: Parser<G,U>) -> Parser<G,T> {
         PostPredicate(self, p)
+    }
+
+    fn debug(self, tag: ~str) -> Parser<G,T> {
+        Debug(tag, self)
     }
 }
 
@@ -627,5 +678,23 @@ fn idents_or_digits() {
             Ident().map(IsIdent)]).rep(1);
     test((), " 12 24 hi  36", &parser, "[12,24,hi,36]");
     test_err((), "--", &parser, 0);
+}
+
+#[test]
+fn arrows() {
+    let parser = Arrow().rep(1);
+    test((), "-> ->  ->", &parser, "[(),(),()]");
+}
+
+#[test]
+fn stars() {
+    let parser = Star().rep(1);
+    test((), "* *", &parser, "[(),()]");
+}
+
+#[test]
+fn star_arrow() {
+    let parser = Star().then(Arrow().thenr(Star()).rep(1));
+    test((), "* -> * -> *", &parser, "((),[(),()])");
 }
 

@@ -1,4 +1,3 @@
-use cx;
 use cx::Context;
 use ty;
 use parse::*;
@@ -22,20 +21,11 @@ fn managed<T:'static>(t: T) -> @T { @t }
 ///////////////////////////////////////////////////////////////////////////
 // Kind
 
-struct Kind1;
-
 fn Kind() -> GParser<@ty::Kind> {
-    ~Kind1 as GParser<@ty::Kind>
-}
+    return Ref(get_kind);
 
-impl Parse<Grammar,@ty::Kind> for Kind1 {
-    fn parse(&self,
-             grammar: &Grammar,
-             cx: &mut Context,
-             input: &[u8],
-             start: uint)
-             -> ParseError<(uint, @ty::Kind)> {
-        grammar.kind.parse(grammar, cx, input, start)
+    fn get_kind<'a>(g: &'a Grammar) -> &'a GParser<@ty::Kind> {
+        &g.kind
     }
 }
 
@@ -70,5 +60,6 @@ fn KindDef() -> GParser<@ty::Kind> {
 #[test]
 fn parse_kind() {
     let k = Kind();
-    test(Grammar::new(), "*", &k, "foo");
+    test(Grammar::new(), "*", &k, "*");
+    test(Grammar::new(), "* -> * -> *", &k, "(* -> (* -> *))");
 }
