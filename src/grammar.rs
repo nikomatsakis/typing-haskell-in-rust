@@ -66,3 +66,9 @@ fn KindDef() -> GParser<@ty::Kind> {
         @ty::KFun(k_0, k_1)
     }
 }
+
+#[test]
+fn parse_kind() {
+    let k = Kind();
+    test(Grammar::new(), "*", &k, "foo");
+}

@@ -557,12 +557,13 @@ pub fn parse<G,T>(grammar: &G,
 // Tests
 
 #[cfg(test)]
-fn test<T:Describe>(text: &'static str,
-                    parser: &Parser<(),T>,
-                    expected: &'static str) {
+pub fn test<G,T:Describe>(grammar: G,
+                          text: &'static str,
+                          parser: &Parser<G,T>,
+                          expected: &'static str) {
     let bytes = text.as_bytes();
     let mut cx = Context::new();
-    match parse(&(), &mut cx, bytes, parser) {
+    match parse(&grammar, &mut cx, bytes, parser) {
         Err(idx) => {
             fail!(format!("Parse error at index {}", idx))
         }
@@ -574,12 +575,13 @@ fn test<T:Describe>(text: &'static str,
 }
 
 #[cfg(test)]
-fn test_err<T:Describe>(text: &'static str,
-                        parser: &Parser<(),T>,
-                        expected: uint) {
+pub fn test_err<G,T:Describe>(grammar: G,
+                              text: &'static str,
+                              parser: &Parser<G,T>,
+                              expected: uint) {
     let bytes = text.as_bytes();
     let mut cx = Context::new();
-    match parse(&(), &mut cx, bytes, parser) {
+    match parse(&grammar, &mut cx, bytes, parser) {
         Err(index) => {
             assert_eq!(index, expected);
         }
@@ -593,17 +595,17 @@ fn test_err<T:Describe>(text: &'static str,
 #[test]
 fn idents() {
     let parser = Ident().rep(1);
-    test(" hello    world", &parser, "[hello,world]");
-    test_err("", &parser, 0);
-    test_err("h 1", &parser, 1);
+    test((), " hello    world", &parser, "[hello,world]");
+    test_err((), "", &parser, 0);
+    test_err((), "h 1", &parser, 1);
 }
 
 #[test]
 fn digits() {
     let parser = Integer().rep(1);
-    test(" 12 24   36", &parser, "[12,24,36]");
-    test_err("", &parser, 0);
-    test_err("1 h", &parser, 1);
+    test((), " 12 24   36", &parser, "[12,24,36]");
+    test_err((), "", &parser, 0);
+    test_err((), "1 h", &parser, 1);
 }
 
 #[test]
@@ -623,7 +625,7 @@ fn idents_or_digits() {
         Choice(~[
             Integer().map(IsNumber),
             Ident().map(IsIdent)]).rep(1);
-    test(" 12 24 hi  36", &parser, "[12,24,hi,36]");
-    test_err("--", &parser, 0);
+    test((), " 12 24 hi  36", &parser, "[12,24,hi,36]");
+    test_err((), "--", &parser, 0);
 }
 

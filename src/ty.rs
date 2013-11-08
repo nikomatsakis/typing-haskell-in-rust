@@ -33,6 +33,13 @@ pub struct Tycon {
 ///////////////////////////////////////////////////////////////////////////
 // Strings
 
+impl<T:cx::Describe> cx::Describe for @T {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        let &@ref this = self;
+        this.describe(cx, out);
+    }
+}
+
 impl cx::Describe for uint {
     fn describe(&self, _: &Context, out: &mut ~str) {
         out.push_str(format!("{}", *self));
@@ -53,6 +60,23 @@ impl cx::Describe for Type {
             }
             TGen(id) => {
                 out.push_str(format!("${}", id));
+            }
+        }
+    }
+}
+
+impl cx::Describe for Kind {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        match *self {
+            Star => {
+                out.push_str("*");
+            }
+            KFun(k1, k2) => {
+                out.push_str("(");
+                k1.describe(cx, out);
+                out.push_str(" -> ");
+                k2.describe(cx, out);
+                out.push_str(")");
             }
         }
     }
