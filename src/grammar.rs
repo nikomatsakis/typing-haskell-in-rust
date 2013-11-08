@@ -10,7 +10,8 @@ pub struct Grammar {
 
 impl Grammar {
     pub fn new() -> Grammar {
-        Grammar { kind: MkKind(), ty: MkTy() }
+        Grammar { kind: MkKind(),
+                  ty: MkTy() }
     }
 }
 
@@ -86,7 +87,7 @@ fn parse_kind_paren_r() {
 ///////////////////////////////////////////////////////////////////////////
 // KindDef
 
-fn KindDef() -> GParser<ty::KindDef> {
+pub fn KindDef() -> GParser<ty::KindDef> {
     let c = Choice(~[
             Ident().thenl(ColonColon()).then(Kind()).thenl(Semi()),
             TypeName().thenl(ColonColon()).then(Kind()).thenl(Semi()) ]);

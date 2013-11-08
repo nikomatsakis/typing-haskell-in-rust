@@ -171,6 +171,20 @@ impl Subst {
     }
 }
 
+impl cx::Describe for SubstPair {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        self.from.describe(cx, out);
+        out.push_str(" -> ");
+        self.to.describe(cx, out);
+    }
+}
+
+impl cx::Describe for Subst {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        self.pairs.describe(cx, out);
+    }
+}
+
 pub trait Types {
     fn apply(&self, subst: &Subst) -> Self;
     fn tv(&self) -> ~[Tyvar];

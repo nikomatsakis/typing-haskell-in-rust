@@ -1,6 +1,7 @@
 use cx::{Context, Describe};
 use intern;
 use std::uint;
+use std::str;
 
 //////////////////////////////////////////////////////////////////////////////
 // Simple parser combinator interface
@@ -670,6 +671,21 @@ pub fn parse<G,T>(grammar: &G,
     }
 }
 
+pub fn parse_or_fail<G,T>(grammar: &G,
+                          cx: &mut Context,
+                          text: &[u8],
+                          parser: &Parser<G,T>)
+                          -> T {
+    match parse(grammar, cx, text, parser) {
+        Ok(v) => v,
+        Err(pos) => {
+            fail!(format!("Parse error: \"{}\" (here) \"{}\"",
+                          str::from_utf8(text.slice_to(pos)),
+                          str::from_utf8(text.slice_from(pos))));
+        }
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Tests
 
@@ -685,7 +701,7 @@ pub fn test<G,T:Describe>(grammar: G,
             fail!(format!("Parse error at index {}", idx))
         }
         Ok(v) => {
-            let description = v.mk_str(&mut cx);
+            let description = cx.mk_str(v);
             assert_eq!(description.slice_from(0), expected);
         }
     }
@@ -703,7 +719,7 @@ pub fn test_err<G,T:Describe>(grammar: G,
             assert_eq!(index, expected);
         }
         Ok(v) => {
-            let description = v.mk_str(&mut cx);
+            let description = cx.mk_str(v);
             fail!(format!("Parse succeeded with {}", description));
         }
     }

@@ -62,14 +62,14 @@ impl Unification for Context {
                    -> err::Fallible<ty::Subst> {
         match (t1, t2) {
             (@ty::TAp(l, r), @ty::TAp(l1, r1)) => seq!(
-                let s1 <- self.mgu(l, l1);
-                let s2 <- self.mgu(r, r1);
+                let s1 <- self.match_types(l, l1);
+                let s2 <- self.match_types(r, r1);
                 let r <- ty::merge(&s1, &s2);
                 return r;
             ),
 
-            (@ty::TVar(u), t) | (t, @ty::TVar(u)) => {
-                self.var_bind(u, t)
+            (@ty::TVar(u), t) if u.kind(self) == t.kind(self) => {
+                Ok(ty::Subst::from(u, t))
             }
 
             (@ty::TCon(tc1), @ty::TCon(tc2)) => {
@@ -85,4 +85,64 @@ impl Unification for Context {
             }
         }
     }
+}
+
+#[test]
+fn test_mgu_very_simple() {
+    let mut cx = Context::new();
+    cx.load_kind_defs(["List :: * -> *;",
+                       "Int :: *;",
+                       "a :: *;"]);
+    let t1 = cx.parse_ty("List Int");
+    let t2 = cx.parse_ty("List a");
+    let s = err::check_ok(cx.mgu(t1, t2));
+    assert_eq!(cx.mk_str(s), ~"['a -> Int]");
+}
+
+#[test]
+fn test_mgu_bad_kind() {
+    let mut cx = Context::new();
+    cx.load_kind_defs(["List :: * -> *;",
+                       "Int :: *;",
+                       "a :: * -> *;"]);
+    let t1 = cx.parse_ty("List Int");
+    let t2 = cx.parse_ty("List a");
+    let r = cx.mgu(t1, t2);
+    err::check_err(&mut cx, "KindCheck", r);
+}
+
+#[test]
+fn test_mgu_bad_occurs() {
+    let mut cx = Context::new();
+    cx.load_kind_defs(["List :: * -> *;",
+                       "Int :: *;",
+                       "a :: * -> *;"]);
+    let t1 = cx.parse_ty("List (List a)");
+    let t2 = cx.parse_ty("List a");
+    let r = cx.mgu(t1, t2);
+    err::check_err(&mut cx, "OccursCheck", r);
+}
+
+#[test]
+fn test_match_right_way() {
+    let mut cx = Context::new();
+    cx.load_kind_defs(["List :: * -> *;",
+                       "Int :: *;",
+                       "a :: *;"]);
+    let t1 = cx.parse_ty("List a");
+    let t2 = cx.parse_ty("List Int");
+    let r = err::check_ok(cx.match_types(t1, t2));
+    assert_eq!(cx.mk_str(r), ~"['a -> Int]");
+}
+
+#[test]
+fn test_match_wrong_way() {
+    let mut cx = Context::new();
+    cx.load_kind_defs(["List :: * -> *;",
+                       "Int :: *;",
+                       "a :: *;"]);
+    let t1 = cx.parse_ty("List Int");
+    let t2 = cx.parse_ty("List a");
+    let r = cx.match_types(t1, t2);
+    err::check_err(&mut cx, "MismatchedTypes", r);
 }

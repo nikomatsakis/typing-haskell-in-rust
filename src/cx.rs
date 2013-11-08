@@ -1,6 +1,8 @@
 // Context: ties everything together
 
+use grammar;
 use intern;
+use parse;
 use std::hashmap::HashMap;
 use ty;
 
@@ -63,27 +65,42 @@ impl Context {
         }
     }
 
-    fn func(&self, input: @ty::Type, output: @ty::Type) -> @ty::Type {
+    pub fn func(&self, input: @ty::Type, output: @ty::Type) -> @ty::Type {
         @ty::TAp(@ty::TAp(self.types.t_arrow, input), output)
     }
 
-    fn list(&self, elem: @ty::Type) -> @ty::Type {
+    pub fn list(&self, elem: @ty::Type) -> @ty::Type {
         @ty::TAp(self.types.t_list, elem)
     }
 
-    fn pair(&self, a: @ty::Type, b: @ty::Type) -> @ty::Type {
+    pub fn pair(&self, a: @ty::Type, b: @ty::Type) -> @ty::Type {
         @ty::TAp(@ty::TAp(self.types.t_tuple2, a), b)
+    }
+
+    pub fn load_kind_defs(&mut self, defs: &[&str]) {
+        let g = grammar::Grammar::new();
+        let kind_def_parser = grammar::KindDef();
+        for text in defs.iter() {
+            let kind_def = parse::parse_or_fail(&g, self, text.as_bytes(),
+                                                &kind_def_parser);
+            self.kinds.insert(kind_def.id, kind_def.kind);
+        }
+    }
+
+    pub fn parse_ty(&mut self, text: &str) -> @ty::Type {
+        let g = grammar::Grammar::new();
+        parse::parse_or_fail(&g, self, text.as_bytes(), &g.ty)
+    }
+
+    pub fn mk_str<D:Describe>(&mut self, d: D) -> ~str {
+        let mut s = ~"";
+        d.describe(self, &mut s);
+        s
     }
 }
 
 
 pub trait Describe {
-    fn mk_str(&self, cx: &Context) -> ~str {
-        let mut s = ~"";
-        self.describe(cx, &mut s);
-        s
-    }
-
     fn describe(&self, cx: &Context, out: &mut ~str);
 }
 
