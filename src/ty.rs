@@ -44,7 +44,7 @@ impl cx::Describe for Type {
             TAp(ref t1, ref t2) => {
                 out.push_str("(");
                 t1.describe(cx, out);
-                out.push_str(" -> ");
+                out.push_str(" ");
                 t2.describe(cx, out);
                 out.push_str(")");
             }

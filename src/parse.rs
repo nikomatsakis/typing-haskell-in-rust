@@ -5,6 +5,9 @@ use std::uint;
 //////////////////////////////////////////////////////////////////////////////
 // Simple parser combinator interface
 
+/// A parser that, given a grammar def'n of type `G`, produces data of
+/// type `T`. The grammar is used to create cyclic productions, see
+/// the `Ref` parser and `grammar::Kind` for an example.
 pub trait Parse<G,T> {
     fn parse(&self,
              grammar: &G,
@@ -212,7 +215,7 @@ impl<G> Parse<G,()> for Token {
 
 struct Integer1;
 
-fn Integer<G>() -> Parser<G,uint> {
+pub fn Integer<G>() -> Parser<G,uint> {
     obj(Integer1)
 }
 
@@ -569,13 +572,11 @@ impl<G,T> Parse<G,T> for Debug<G,T> {
              -> ParseError<(uint, T)> {
         match self.sub.parse(grammar, cx, input, start) {
             Ok((pos, v)) => {
-                debug2!("{}: ok  pos={} '{}' v={:?}", self.tag, pos,
-                        input[pos] as char, v);
+                debug2!("{}: ok  pos={} v={:?}", self.tag, pos, v);
                 Ok((pos, v))
             }
             Err(pos) => {
-                debug2!("{}: err pos={} '{}'", self.tag, pos,
-                        input[pos] as char);
+                debug2!("{}: err pos={}", self.tag, pos);
                 Err(pos)
             }
         }
@@ -583,7 +584,7 @@ impl<G,T> Parse<G,T> for Debug<G,T> {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Convenient methods
+// Convenient methods for constructing grammars
 
 fn first<T,U>((x, _): (T,U)) -> T { x }
 fn second<T,U>((_, x): (T,U)) -> U { x }
@@ -596,38 +597,54 @@ pub trait Convenience<G,T> {
     fn map<U>(self, f: Fn<T,U>) -> Parser<G,U>;
     fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<G,U>;
     fn test<U>(self, p: Parser<G,U>) -> Parser<G,T>;
+    fn not(self) -> Parser<G,()>;
     fn debug(self, tag: ~str) -> Parser<G,T>;
 }
 
 impl<G,T> Convenience<G,T> for Parser<G,T> {
+    /// Repeat `self` at least `min` times
     fn rep(self, min: uint) -> Parser<G,~[T]> {
         Repeat(self, min)
     }
 
+    /// Parse `self` then `u`, keeping both sides
     fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)> {
         Tuple(self, u)
     }
 
+    /// Parse `self` then `u`, keeping left
     fn thenl<U>(self, u: Parser<G,U>) -> Parser<G,T> {
         Tuple(self, u).map(first)
     }
 
+    /// Parse `self` then `u`, keeping right
     fn thenr<U>(self, u: Parser<G,U>) -> Parser<G,U> {
         Tuple(self, u).map(second)
     }
 
+    /// Map result
     fn map<U>(self, f: Fn<T,U>) -> Parser<G,U> {
         Map(self, f)
     }
 
+    /// Map where function takes a context parameter
     fn map_cx<U>(self, f: CxFn<T,U>) -> Parser<G,U> {
         MapCx(self, f)
     }
 
+    /// `self` but only if `p` can be parsed
     fn test<U>(self, p: Parser<G,U>) -> Parser<G,T> {
         PostPredicate(self, p)
     }
 
+    /// Parse succeeds if `self` produces an error.
+    /// Typically used in combination with test:
+    ///   foo.test(bar.not())
+    fn not(self) -> Parser<G,()> {
+        Not(self)
+    }
+
+    /// Print some debug output after parse is attempted
     fn debug(self, tag: ~str) -> Parser<G,T> {
         Debug(tag, self)
     }

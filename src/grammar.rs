@@ -5,11 +5,12 @@ use parse::*;
 
 pub struct Grammar {
     kind: GParser<@ty::Kind>,
+    ty: GParser<@ty::Type>,
 }
 
 impl Grammar {
     pub fn new() -> Grammar {
-        Grammar { kind: MkKind() }
+        Grammar { kind: MkKind(), ty: MkTy() }
     }
 }
 
@@ -23,9 +24,9 @@ fn managed<T:'static>(t: T) -> @T { @t }
 // Kind
 
 fn Kind() -> GParser<@ty::Kind> {
-    return Ref(get_kind);
+    return Ref(get);
 
-    fn get_kind<'a>(g: &'a Grammar) -> &'a GParser<@ty::Kind> {
+    fn get<'a>(g: &'a Grammar) -> &'a GParser<@ty::Kind> {
         &g.kind
     }
 }
@@ -53,7 +54,7 @@ fn MkKind() -> GParser<@ty::Kind> {
 
         let ks_n = *ks.last();
         let ks_1 = ks.slice(0, ks.len() - 1);
-        let k_1 = ks_1.rev_iter().fold(ks_n, |k1, &k2| @ty::KFun(k1, k2));
+        let k_1 = ks_1.rev_iter().fold(ks_n, |k1, &k2| @ty::KFun(k2, k1));
         @ty::KFun(k_0, k_1)
     }
 }
@@ -71,9 +72,15 @@ fn parse_kind_star_arrow_star_arrow_star() {
 }
 
 #[test]
-fn parse_kind_paren() {
+fn parse_kind_paren_l() {
     let k = Kind();
     test(Grammar::new(), "(* -> *) -> *", &k, "((* -> *) -> *)");
+}
+
+#[test]
+fn parse_kind_paren_r() {
+    let k = Kind();
+    test(Grammar::new(), "* -> * -> (* -> *)", &k, "(* -> (* -> (* -> *)))");
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -97,4 +104,65 @@ fn parse_kind_def() {
          "a :: * -> *; Box :: *;",
          &k,
          "[a :: (* -> *),Box :: *]");
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Type
+
+fn Ty() -> GParser<@ty::Type> {
+    return Ref(get);
+
+    fn get<'a>(g: &'a Grammar) -> &'a GParser<@ty::Type> {
+        &g.ty
+    }
+}
+
+fn MkTy() -> GParser<@ty::Type> {
+    return t1().rep(1).map(mk_ap);
+
+    fn t1() -> GParser<@ty::Type> {
+        Choice(~[ Ident().map(mk_tvar),
+                  TypeName().map(mk_tcon),
+                  Integer().map(mk_gen),
+                  Lparen().thenr(Ty()).thenl(Rparen()), ])
+    }
+
+    fn mk_tvar(id: Id) -> @ty::Type {
+        @ty::TVar(ty::Tyvar {id: id})
+    }
+
+    fn mk_tcon(id: Id) -> @ty::Type {
+        @ty::TCon(ty::Tycon {id: id})
+    }
+
+    fn mk_gen(i: uint) -> @ty::Type {
+        @ty::TGen(i)
+    }
+
+    fn mk_ap(tys: ~[@ty::Type]) -> @ty::Type {
+        // Vector List Int ==>
+        //
+        //    ((Vector List) Int)
+        let first = tys[0];
+        let rest = tys.slice_from(1);
+        rest.iter().fold(first, |t1, &t2| @ty::TAp(t1, t2))
+    }
+}
+
+#[test]
+fn parse_ty_a() {
+    let k = Ty();
+    test(Grammar::new(), "List a", &k, "(List 'a)")
+}
+
+#[test]
+fn parse_ty_3() {
+    let k = Ty();
+    test(Grammar::new(), "Vector List Int", &k, "((Vector List) Int)")
+}
+
+#[test]
+fn parse_ty_paren() {
+    let k = Ty();
+    test(Grammar::new(), "Vector (List Int) Foo", &k, "((Vector (List Int)) Foo)")
 }
