@@ -89,7 +89,6 @@ impl cx::Describe for Tycon {
 
 impl cx::Describe for Tyvar {
     fn describe(&self, cx: &Context, out: &mut ~str) {
-        out.push_str("'");
         self.id.describe(cx, out);
     }
 }

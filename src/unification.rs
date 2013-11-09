@@ -121,7 +121,7 @@ fn test_mgu_very_simple() {
     let t1 = cx.parse_ty("List Int");
     let t2 = cx.parse_ty("List a");
     let s = err::check_ok(cx.mgu(t1, t2));
-    assert_eq!(cx.mk_str(s), ~"['a -> Int]");
+    assert_eq!(cx.mk_str(s), ~"[a -> Int]");
 }
 
 #[test]
@@ -157,7 +157,7 @@ fn test_match_right_way() {
     let t1 = cx.parse_ty("List a");
     let t2 = cx.parse_ty("List Int");
     let r = err::check_ok(cx.match_types(t1, t2));
-    assert_eq!(cx.mk_str(r), ~"['a -> Int]");
+    assert_eq!(cx.mk_str(r), ~"[a -> Int]");
 }
 
 #[test]

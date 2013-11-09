@@ -154,7 +154,7 @@ fn MkTy() -> GParser<@ty::Type> {
 #[test]
 fn parse_ty_a() {
     let k = Ty();
-    test(Grammar::new(), "List a", &k, "(List 'a)")
+    test(Grammar::new(), "List a", &k, "(List a)")
 }
 
 #[test]
@@ -200,11 +200,11 @@ fn parse_pred() {
 // validate the rules for legal heads/instances. Therefore,
 // we just write:
 //
-//   class C D => E
+//   class C, D => E
 
 fn ClassDecl() -> GParser<tc::ClassDecl> {
     return (Class().
-            thenr(TypeName().rep(0).thenl(FatArrow()).opt()).
+            thenr(TypeName().rep_sep(0, Comma()).thenl(FatArrow()).opt()).
             then(TypeName())).map(mk_tc);
 
     fn mk_tc((superclasses, head): (Option<~[Id]>, Id)) -> tc::ClassDecl {
@@ -212,7 +212,6 @@ fn ClassDecl() -> GParser<tc::ClassDecl> {
         tc::ClassDecl { type_class: head, superclasses: superclasses }
     }
 }
-
 
 #[test]
 fn parse_classDecl_no_super() {
@@ -229,6 +228,40 @@ fn parse_classDecl_one_super() {
 #[test]
 fn parse_classDecl_two_super() {
     let k = ClassDecl();
-    test(Grammar::new(), "class Foo Bar => Ord", &k, "class [Foo,Bar] => Ord")
+    test(Grammar::new(), "class Foo, Bar => Ord", &k, "class [Foo,Bar] => Ord")
 }
 
+///////////////////////////////////////////////////////////////////////////
+// Type Class instance
+//
+// We write:
+//
+//   instance Eq a, Show a => EqShow a
+//
+// We omit the actual method declarations since we don't care.
+
+fn InstanceDecl() -> GParser<tc::Instance> {
+    return (Instance().
+            thenr(Pred().rep_sep(0, Comma()).thenl(FatArrow()).opt()).
+            then(Pred())).map(mk_instance);
+
+    fn mk_instance((preds, head): (Option<~[tc::Pred]>, tc::Pred))
+                   -> tc::Instance {
+        let preds = match preds { Some(v) => v, None => ~[] };
+        tc::Instance { qual: tc::Qual { preds: preds, head: head } }
+    }
+}
+
+#[test]
+fn parse_instance_no_preds() {
+    let k = InstanceDecl();
+    test(Grammar::new(), "instance Eq Int", &k, "instance [] => Eq Int")
+}
+
+#[test]
+fn parse_instance_a_pred() {
+    let k = InstanceDecl();
+    test(Grammar::new(),
+         "instance Eq a => Ord a", &k,
+         "instance [Eq a] => Ord a")
+}

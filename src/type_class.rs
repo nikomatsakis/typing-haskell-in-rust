@@ -183,3 +183,12 @@ impl Describe for ClassDecl {
         self.type_class.describe(cx, out);
     }
 }
+
+impl Describe for Instance {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        out.push_str("instance ");
+        self.qual.preds.describe(cx, out);
+        out.push_str(" => ");
+        self.qual.head.describe(cx, out);
+    }
+}

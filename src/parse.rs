@@ -165,6 +165,10 @@ pub fn Token<G>(s: &'static str, term: Fn<char, bool>) -> Parser<G,()> {
     obj(Token { str: s, term: term })
 }
 
+pub fn Comma<G>() -> Parser<G,()> {
+    Token(",", is_any)
+}
+
 pub fn Star<G>() -> Parser<G,()> {
     Token("*", is_not_oper)
 }
@@ -346,15 +350,18 @@ impl<G> Parse<G,intern::Id> for Ident1 {
 }
 
 //////////////////////////////////////////////////////////////////////////////
-// Repeat: Parse over and over.
+// Repeat: Parse over and over with an optional separator.
 
 pub struct Repeat<G,T> {
     sub: Parser<G,T>,
-    min: uint
+    min: uint,
+    sep: Option<Parser<G,()>>
 }
 
-pub fn Repeat<G,T>(sub: Parser<G,T>, min: uint) -> Parser<G,~[T]> {
-    obj(Repeat { sub: sub, min: min })
+pub fn Repeat<G,T>(sub: Parser<G,T>,
+                   min: uint,
+                   sep: Option<Parser<G,()>>) -> Parser<G,~[T]> {
+    obj(Repeat { sub: sub, min: min, sep: sep })
 }
 
 impl<G,T> Parse<G,~[T]> for Repeat<G,T> {
@@ -365,6 +372,7 @@ impl<G,T> Parse<G,~[T]> for Repeat<G,T> {
              start: uint)
              -> ParseError<(uint, ~[T])> {
         let mut pos = start;
+        let mut err_pos;
         let mut result = ~[];
         loop {
             match self.sub.parse(grammar, cx, input, pos) {
@@ -372,14 +380,32 @@ impl<G,T> Parse<G,~[T]> for Repeat<G,T> {
                     result.push(v);
                     pos = end;
                 }
-                Err(e) => {
-                    if result.len() >= self.min {
-                        return Ok((pos, result));
-                    } else {
-                        return Err(e);
-                    }
+                Err(end) => {
+                    err_pos = end;
+                    break;
                 }
             }
+
+            match self.sep {
+                Some(ref sep) => {
+                    match sep.parse(grammar, cx, input, pos) {
+                        Ok((end, ())) => {
+                            pos = end;
+                        }
+                        Err(end) => {
+                            err_pos = end;
+                            break; // no separator, list is complete.
+                        }
+                    }
+                }
+                None => { }
+            }
+        }
+
+        if result.len() >= self.min {
+            return Ok((pos, result));
+        } else {
+            return Err(err_pos);
         }
     }
 }
@@ -637,6 +663,7 @@ fn second<T,U>((_, x): (T,U)) -> U { x }
 
 pub trait Convenience<G,T> {
     fn rep(self, min: uint) -> Parser<G,~[T]>;
+    fn rep_sep(self, min: uint, sep: Parser<G,()>) -> Parser<G,~[T]>;
     fn opt(self) -> Parser<G,Option<T>>;
     fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)>;
     fn thenl<U>(self, u: Parser<G,U>) -> Parser<G,T>;
@@ -651,7 +678,12 @@ pub trait Convenience<G,T> {
 impl<G,T> Convenience<G,T> for Parser<G,T> {
     /// Repeat `self` at least `min` times
     fn rep(self, min: uint) -> Parser<G,~[T]> {
-        Repeat(self, min)
+        Repeat(self, min, None)
+    }
+
+    /// Repeat `self` at least `min` times with separator `sep`
+    fn rep_sep(self, min: uint, sep: Parser<G,()>) -> Parser<G,~[T]> {
+        Repeat(self, min, Some(sep))
     }
 
     /// At most once.
