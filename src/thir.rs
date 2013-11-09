@@ -1,8 +1,12 @@
-pub mod macro;
-pub mod ty;
+#[feature(macro_rules, managed_boxes, globs)];
+
+pub mod cx;
 pub mod err;
-pub mod unification;
-pub mod parse;
 pub mod grammar;
 pub mod intern;
-pub mod cx;
+pub mod macro;
+pub mod parse;
+pub mod ty;
+pub mod type_class;
+pub mod unification;
+pub mod util;

@@ -3,6 +3,7 @@ use cx::Context;
 use err;
 use err::Fallible;
 use intern::Id;
+use util;
 
 #[deriving(Eq)]
 pub enum Kind {
@@ -208,7 +209,7 @@ impl Types for @Type {
     fn tv(&self) -> ~[Tyvar] {
         match **self {
             TVar(tv) => ~[tv],
-            TAp(s, t) => union(s.tv(), t.tv()),
+            TAp(s, t) => util::union(s.tv(), t.tv()),
             TCon(_) | TGen(_) => ~[],
         }
     }
@@ -219,18 +220,8 @@ impl<A:Types> Types for ~[A] {
         self.map(|a| a.apply(s))
     }
     fn tv(&self) -> ~[Tyvar] {
-        self.iter().fold(~[], |v, a| union(v, a.tv()))
+        self.iter().fold(~[], |v, a| util::union(v, a.tv()))
     }
-}
-
-fn union<T:Eq>(v1: ~[T], v2: ~[T]) -> ~[T] {
-    let mut v1 = v1;
-    for t in v2.move_iter() {
-        if !v1.contains(&t) {
-            v1.push(t);
-        }
-    }
-    v1
 }
 
 pub fn compose(s1: Subst, s2: Subst) -> Subst {

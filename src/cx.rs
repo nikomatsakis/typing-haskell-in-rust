@@ -2,6 +2,7 @@
 
 use grammar;
 use intern;
+use intern::Id;
 use parse;
 use std::hashmap::HashMap;
 use ty;
@@ -10,7 +11,7 @@ pub struct Context {
     interner: intern::Interner,
     k_star: @ty::Kind,
     types: StandardTypes,
-    kinds: HashMap<intern::Id,@ty::Kind>,
+    kinds: HashMap<Id,@ty::Kind>,
 }
 
 pub struct StandardTypes {
@@ -65,6 +66,10 @@ impl Context {
         }
     }
 
+    pub fn id(&mut self, nm: &str) -> Id {
+        self.interner.id(nm)
+    }
+
     pub fn func(&self, input: @ty::Type, output: @ty::Type) -> @ty::Type {
         @ty::TAp(@ty::TAp(self.types.t_arrow, input), output)
     }
@@ -92,7 +97,7 @@ impl Context {
         parse::parse_or_fail(&g, self, text.as_bytes(), &g.ty)
     }
 
-    pub fn mk_str<D:Describe>(&mut self, d: D) -> ~str {
+    pub fn mk_str<D:Describe>(&self, d: D) -> ~str {
         let mut s = ~"";
         d.describe(self, &mut s);
         s

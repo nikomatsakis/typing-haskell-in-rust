@@ -573,11 +573,11 @@ impl<G,T> Parse<G,T> for Debug<G,T> {
              -> ParseError<(uint, T)> {
         match self.sub.parse(grammar, cx, input, start) {
             Ok((pos, v)) => {
-                debug2!("{}: ok  pos={} v={:?}", self.tag, pos, v);
+                debug!("{}: ok  pos={} v={:?}", self.tag, pos, v);
                 Ok((pos, v))
             }
             Err(pos) => {
-                debug2!("{}: err pos={}", self.tag, pos);
+                debug!("{}: err pos={}", self.tag, pos);
                 Err(pos)
             }
         }

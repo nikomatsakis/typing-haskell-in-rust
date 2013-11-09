@@ -2,11 +2,11 @@ use cx;
 
 #[deriving(Eq,Clone,IterBytes)]
 pub struct Id {
-    repr: uint // index into context's identifiers list
+    index: uint // index into context's identifiers list
 }
 
 pub fn Id(u: uint) -> Id {
-    Id { repr: u }
+    Id { index: u }
 }
 
 pub struct Interner {
@@ -18,6 +18,10 @@ impl Interner {
         Interner {
             identifiers: ~[]
         }
+    }
+
+    pub fn to_str<'a>(&'a self, id: Id) -> &'a str {
+        self.identifiers[id.index].slice_from(0)
     }
 
     pub fn id(&mut self, s: &str) -> Id {
@@ -37,7 +41,7 @@ impl Interner {
 
 impl cx::Describe for Id {
     fn describe(&self, cx: &cx::Context, out: &mut ~str) {
-        out.push_str(cx.interner.identifiers[self.repr]);
+        out.push_str(cx.interner.to_str(*self));
     }
 }
 

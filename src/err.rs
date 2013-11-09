@@ -7,6 +7,7 @@ pub enum Err {
     DuplicateBindings(intern::Id),
     MismatchedTypes(@ty::Type, @ty::Type),
     OccursCheck(ty::Tyvar, @ty::Type),
+    ClassesDiffer(intern::Id, intern::Id),
     KindCheck(ty::Tyvar, @ty::Type),
 }
 

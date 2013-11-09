@@ -3,16 +3,23 @@ use err;
 use ty;
 use ty::Types;
 use ty::HasKind;
+use tc = type_class;
 
 trait Unification {
     fn mgu(&mut self, t1: @ty::Type, t2: @ty::Type)
            -> err::Fallible<ty::Subst>;
+
+    fn mgu_pred(&mut self, t1: &tc::Pred, t2: &tc::Pred)
+                -> err::Fallible<ty::Subst>;
 
     fn var_bind(&mut self, u: ty::Tyvar, t: @ty::Type)
                 -> err::Fallible<ty::Subst>;
 
     fn match_types(&mut self, t1: @ty::Type, t2: @ty::Type)
                    -> err::Fallible<ty::Subst>;
+
+    fn match_types_pred(&mut self, t1: &tc::Pred, t2: &tc::Pred)
+                        -> err::Fallible<ty::Subst>;
 }
 
 impl Unification for Context {
@@ -42,6 +49,15 @@ impl Unification for Context {
             _ => {
                 Err(err::MismatchedTypes(t1, t2))
             }
+        }
+    }
+
+    fn mgu_pred(&mut self, p1: &tc::Pred, p2: &tc::Pred)
+                -> err::Fallible<ty::Subst> {
+        if p1.type_class == p2.type_class {
+            self.mgu(p1.ty, p2.ty)
+        } else {
+            Err(err::ClassesDiffer(p1.type_class, p2.type_class))
         }
     }
 
@@ -83,6 +99,15 @@ impl Unification for Context {
             _ => {
                 Err(err::MismatchedTypes(t1, t2))
             }
+        }
+    }
+
+    fn match_types_pred(&mut self, p1: &tc::Pred, p2: &tc::Pred)
+                        -> err::Fallible<ty::Subst> {
+        if p1.type_class == p2.type_class {
+            self.match_types(p1.ty, p2.ty)
+        } else {
+            Err(err::ClassesDiffer(p1.type_class, p2.type_class))
         }
     }
 }

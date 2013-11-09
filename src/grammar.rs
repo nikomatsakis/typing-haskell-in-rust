@@ -167,3 +167,7 @@ fn parse_ty_paren() {
     let k = Ty();
     test(Grammar::new(), "Vector (List Int) Foo", &k, "((Vector (List Int)) Foo)")
 }
+
+///////////////////////////////////////////////////////////////////////////
+// KindDef
+
