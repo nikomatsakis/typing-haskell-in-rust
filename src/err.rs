@@ -41,4 +41,8 @@ pub fn check_err<T:Describe>(cx: &mut cx::Context,
     }
 }
 
-
+impl ToStr for Err {
+    fn to_str(&self) -> ~str {
+        format!("{:?}", *self)
+    }
+}

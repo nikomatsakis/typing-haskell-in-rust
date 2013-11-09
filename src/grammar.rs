@@ -1,6 +1,7 @@
 use cx::Context;
 use intern::Id;
 use ty;
+use tc = type_class;
 use parse::*;
 
 pub struct Grammar {
@@ -169,5 +170,65 @@ fn parse_ty_paren() {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// KindDef
+// Predicates
+//
+// TypeClass type ==> e.g., Eq Int
+
+fn Pred() -> GParser<tc::Pred> {
+    return TypeName().then(Ty()).map(mk_pred);
+
+    fn mk_pred((type_class, ty): (Id, @ty::Type)) -> tc::Pred {
+        tc::Pred { type_class: type_class, ty: ty }
+    }
+}
+
+#[test]
+fn parse_pred() {
+    let k = Pred();
+    test(Grammar::new(), "Eq Int", &k, "Eq Int")
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Type Class declaration
+//
+// In real Haskell, we might write:
+//
+//   class C a, D a => E a where ...
+//
+// But in this limited version, we don't support MPTC, don't
+// really care about the specific methods, and don't want to
+// validate the rules for legal heads/instances. Therefore,
+// we just write:
+//
+//   class C D => E
+
+fn ClassDecl() -> GParser<tc::ClassDecl> {
+    return (Class().
+            thenr(TypeName().rep(0).thenl(FatArrow()).opt()).
+            then(TypeName())).map(mk_tc);
+
+    fn mk_tc((superclasses, head): (Option<~[Id]>, Id)) -> tc::ClassDecl {
+        let superclasses = match superclasses { Some(v) => v, None => ~[] };
+        tc::ClassDecl { type_class: head, superclasses: superclasses }
+    }
+}
+
+
+#[test]
+fn parse_classDecl_no_super() {
+    let k = ClassDecl();
+    test(Grammar::new(), "class Eq", &k, "class [] => Eq")
+}
+
+#[test]
+fn parse_classDecl_one_super() {
+    let k = ClassDecl();
+    test(Grammar::new(), "class Eq => Ord", &k, "class [Eq] => Ord")
+}
+
+#[test]
+fn parse_classDecl_two_super() {
+    let k = ClassDecl();
+    test(Grammar::new(), "class Foo Bar => Ord", &k, "class [Foo,Bar] => Ord")
+}
 

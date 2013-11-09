@@ -5,25 +5,25 @@ use ty::Types;
 use ty::HasKind;
 use tc = type_class;
 
-trait Unification {
-    fn mgu(&mut self, t1: @ty::Type, t2: @ty::Type)
+pub trait Unification {
+    fn mgu(&self, t1: @ty::Type, t2: @ty::Type)
            -> err::Fallible<ty::Subst>;
 
-    fn mgu_pred(&mut self, t1: &tc::Pred, t2: &tc::Pred)
+    fn mgu_pred(&self, t1: &tc::Pred, t2: &tc::Pred)
                 -> err::Fallible<ty::Subst>;
 
-    fn var_bind(&mut self, u: ty::Tyvar, t: @ty::Type)
+    fn var_bind(&self, u: ty::Tyvar, t: @ty::Type)
                 -> err::Fallible<ty::Subst>;
 
-    fn match_types(&mut self, t1: @ty::Type, t2: @ty::Type)
+    fn match_types(&self, t1: @ty::Type, t2: @ty::Type)
                    -> err::Fallible<ty::Subst>;
 
-    fn match_types_pred(&mut self, t1: &tc::Pred, t2: &tc::Pred)
+    fn match_types_pred(&self, t1: &tc::Pred, t2: &tc::Pred)
                         -> err::Fallible<ty::Subst>;
 }
 
 impl Unification for Context {
-    fn mgu(&mut self, t1: @ty::Type, t2: @ty::Type)
+    fn mgu(&self, t1: @ty::Type, t2: @ty::Type)
            -> err::Fallible<ty::Subst> {
         match (t1, t2) {
             (@ty::TAp(l, r), @ty::TAp(l1, r1)) => seq!(
@@ -52,7 +52,7 @@ impl Unification for Context {
         }
     }
 
-    fn mgu_pred(&mut self, p1: &tc::Pred, p2: &tc::Pred)
+    fn mgu_pred(&self, p1: &tc::Pred, p2: &tc::Pred)
                 -> err::Fallible<ty::Subst> {
         if p1.type_class == p2.type_class {
             self.mgu(p1.ty, p2.ty)
@@ -61,7 +61,7 @@ impl Unification for Context {
         }
     }
 
-    fn var_bind(&mut self, u: ty::Tyvar, t: @ty::Type)
+    fn var_bind(&self, u: ty::Tyvar, t: @ty::Type)
                 -> err::Fallible<ty::Subst> {
         if ty::TVar(u) == *t {
             Ok(ty::Subst::null())
@@ -74,7 +74,7 @@ impl Unification for Context {
         }
     }
 
-    fn match_types(&mut self, t1: @ty::Type, t2: @ty::Type)
+    fn match_types(&self, t1: @ty::Type, t2: @ty::Type)
                    -> err::Fallible<ty::Subst> {
         match (t1, t2) {
             (@ty::TAp(l, r), @ty::TAp(l1, r1)) => seq!(
@@ -102,7 +102,7 @@ impl Unification for Context {
         }
     }
 
-    fn match_types_pred(&mut self, p1: &tc::Pred, p2: &tc::Pred)
+    fn match_types_pred(&self, p1: &tc::Pred, p2: &tc::Pred)
                         -> err::Fallible<ty::Subst> {
         if p1.type_class == p2.type_class {
             self.match_types(p1.ty, p2.ty)

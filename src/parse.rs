@@ -60,6 +60,10 @@ fn is_ident_cont(c: char) -> bool {
     }
 }
 
+fn is_not_ident_cont(c: char) -> bool {
+    !is_ident_cont(c)
+}
+
 fn is_oper(c: char) -> bool {
     match c {
         '+' | '-' | '>' | '<' | '*' | '/' => true,
@@ -169,6 +173,10 @@ pub fn Arrow<G>() -> Parser<G,()> {
     Token("->", is_not_oper)
 }
 
+pub fn FatArrow<G>() -> Parser<G,()> {
+    Token("=>", is_not_oper)
+}
+
 pub fn ColonColon<G>() -> Parser<G,()> {
     Token("::", is_not_oper)
 }
@@ -183,6 +191,14 @@ pub fn Lparen<G>() -> Parser<G,()> {
 
 pub fn Rparen<G>() -> Parser<G,()> {
     Token(")", is_any)
+}
+
+pub fn Class<G>() -> Parser<G,()> {
+    Token("class", is_not_ident_cont)
+}
+
+pub fn Instance<G>() -> Parser<G,()> {
+    Token("instance", is_not_ident_cont)
 }
 
 impl<G> Parse<G,()> for Token {
@@ -363,6 +379,35 @@ impl<G,T> Parse<G,~[T]> for Repeat<G,T> {
                         return Err(e);
                     }
                 }
+            }
+        }
+    }
+}
+
+//////////////////////////////////////////////////////////////////////////////
+// Optional: Parse at most once.
+
+pub struct Optional<G,T> {
+    sub: Parser<G,T>,
+}
+
+pub fn Optional<G,T>(sub: Parser<G,T>) -> Parser<G,Option<T>> {
+    obj(Optional { sub: sub })
+}
+
+impl<G,T> Parse<G,Option<T>> for Optional<G,T> {
+    fn parse(&self,
+             grammar: &G,
+             cx: &mut Context,
+             input: &[u8],
+             start: uint)
+             -> ParseError<(uint, Option<T>)> {
+        match self.sub.parse(grammar, cx, input, start) {
+            Ok((end, v)) => {
+                Ok((end, Some(v)))
+            }
+            Err(_) => {
+                Ok((start, None))
             }
         }
     }
@@ -592,6 +637,7 @@ fn second<T,U>((_, x): (T,U)) -> U { x }
 
 pub trait Convenience<G,T> {
     fn rep(self, min: uint) -> Parser<G,~[T]>;
+    fn opt(self) -> Parser<G,Option<T>>;
     fn then<U>(self, u: Parser<G,U>) -> Parser<G,(T,U)>;
     fn thenl<U>(self, u: Parser<G,U>) -> Parser<G,T>;
     fn thenr<U>(self, u: Parser<G,U>) -> Parser<G,U>;
@@ -606,6 +652,11 @@ impl<G,T> Convenience<G,T> for Parser<G,T> {
     /// Repeat `self` at least `min` times
     fn rep(self, min: uint) -> Parser<G,~[T]> {
         Repeat(self, min)
+    }
+
+    /// At most once.
+    fn opt(self) -> Parser<G,Option<T>> {
+        Optional(self)
     }
 
     /// Parse `self` then `u`, keeping both sides

@@ -1,13 +1,15 @@
+use cx::{Context, Describe};
 use intern::{Interner, Id};
 use std::hashmap::HashMap;
 use ty;
+use unification::Unification;
 use util;
 
-/// preds => then
+/// preds => head
 #[deriving(Eq)]
 pub struct Qual<T> {
     preds: ~[Pred],
-    then: T,
+    head: T,
 }
 
 /// `ty` is a member of the type class `type_class`
@@ -15,6 +17,11 @@ pub struct Qual<T> {
 pub struct Pred {
     type_class: Id,
     ty: @ty::Type,
+}
+
+pub struct ClassDecl {
+    type_class: Id,
+    superclasses: ~[Id],
 }
 
 pub struct Class {
@@ -29,11 +36,11 @@ pub struct Instance {
 impl<T:ty::Types> ty::Types for Qual<T> {
     fn apply(&self, subst: &ty::Subst) -> Qual<T> {
         Qual { preds: self.preds.apply(subst),
-               then: self.then.apply(subst) }
+               head: self.head.apply(subst) }
     }
 
     fn tv(&self) -> ~[ty::Tyvar] {
-        util::union(self.preds.tv(), self.then.tv())
+        util::union(self.preds.tv(), self.head.tv())
     }
 }
 
@@ -67,6 +74,10 @@ impl ClassEnv {
 
     pub fn class<'a>(&'a self, id: Id) -> &'a Class {
         self.classes.get(&id)
+    }
+
+    pub fn mut_class<'a>(&'a mut self, id: Id) -> &'a mut Class {
+        self.classes.find_mut(&id).unwrap()
     }
 
     pub fn superclasses<'a>(&'a self, id: Id) -> &'a [Id] {
@@ -111,6 +122,32 @@ impl ClassEnv {
         self.classes.insert(id, class);
     }
 
+    pub fn add_instance(&mut self,
+                        cx: &Context,
+                        preds: ~[Pred],
+                        head: Pred) {
+        if !self.defined(head.type_class) {
+            fail!(format!("No type class named '{}'",
+                          cx.interner.to_str(head.type_class)));
+        }
+
+        let overlapping = {
+            let instances = self.instances(head.type_class);
+            instances.iter().any(|i| self.overlap(cx, &head, &i.qual.head))
+        };
+        if overlapping {
+            fail!(format!("Overlapping instance of '{}'",
+                          cx.interner.to_str(head.type_class)));
+        }
+
+        let instance = Instance { qual: Qual { preds: preds, head: head } };
+        self.mut_class(head.type_class).instances.push(instance);
+    }
+
+    fn overlap(&self, cx: &Context, head1: &Pred, head2: &Pred) -> bool {
+        cx.mgu_pred(head1, head2).is_ok()
+    }
+
     pub fn add_core_classes(&mut self, interner: &mut Interner) {
         self.add_class_str(interner, "Eq", []);
         self.add_class_str(interner, "Ord", ["Eq"]);
@@ -127,5 +164,22 @@ impl ClassEnv {
         self.add_class_str(interner, "RealFrac", ["Real", "Fractional"]);
         self.add_class_str(interner, "Floating", ["Fractional"]);
         self.add_class_str(interner, "RealFloat", ["RealFrac", "Floating"]);
+    }
+}
+
+impl Describe for Pred {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        self.type_class.describe(cx, out);
+        out.push_str(" ");
+        self.ty.describe(cx, out);
+    }
+}
+
+impl Describe for ClassDecl {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        out.push_str("class ");
+        self.superclasses.describe(cx, out);
+        out.push_str(" => ");
+        self.type_class.describe(cx, out);
     }
 }
