@@ -100,6 +100,16 @@ impl Context {
         }
     }
 
+    pub fn parse_tyvar(&mut self, text: &str) -> ty::Tyvar {
+        let id = self.interner.id(text);
+        ty::Tyvar { id: id }
+    }
+
+    pub fn parse_qual_ty(&mut self, text: &str) -> tc::Qual<@ty::Type> {
+        let g = grammar::Grammar::new();
+        parse::parse_or_fail(&g, self, text.as_bytes(), &grammar::QualType())
+    }
+
     pub fn parse_ty(&mut self, text: &str) -> @ty::Type {
         let g = grammar::Grammar::new();
         parse::parse_or_fail(&g, self, text.as_bytes(), &g.ty)

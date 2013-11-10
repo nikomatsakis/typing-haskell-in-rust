@@ -6,6 +6,7 @@ pub mod grammar;
 pub mod intern;
 pub mod macro;
 pub mod parse;
+pub mod scheme;
 pub mod ty;
 pub mod type_class;
 pub mod unification;

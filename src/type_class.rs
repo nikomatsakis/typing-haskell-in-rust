@@ -332,6 +332,14 @@ impl ClassEnv {
     }
 }
 
+impl<T:Describe> Describe for Qual<T> {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        self.preds.describe(cx, out);
+        out.push_str(" => ");
+        self.head.describe(cx, out);
+    }
+}
+
 impl Describe for Pred {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         self.type_class.describe(cx, out);

@@ -5,7 +5,7 @@ use err::Fallible;
 use intern::Id;
 use util;
 
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub enum Kind {
     Star,
     KFun(@Kind, @Kind),
@@ -61,7 +61,7 @@ impl cx::Describe for Type {
                 out.push_str(")");
             }
             TGen(id) => {
-                out.push_str(format!("${}", id));
+                out.push_str(format!("'{}", id));
             }
         }
     }

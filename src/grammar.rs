@@ -189,6 +189,31 @@ fn parse_pred() {
 }
 
 ///////////////////////////////////////////////////////////////////////////
+// Qualified types
+//
+// Foo a => List a
+
+pub fn Qual<H>(head: GParser<H>) -> GParser<tc::Qual<H>> {
+    return (Pred().rep_sep(0, Comma()).thenl(FatArrow()).opt().
+            then(head)).map(mk_qual);
+
+    fn mk_qual<H>((preds, head): (Option<~[tc::Pred]>, H)) -> tc::Qual<H> {
+        let preds = match preds { Some(v) => v, None => ~[] };
+        tc::Qual { preds: preds, head: head }
+    }
+}
+
+pub fn QualType() -> GParser<tc::Qual<@ty::Type>> {
+    Qual(Ty())
+}
+
+#[test]
+fn parse_qual_type() {
+    let k = QualType();
+    test(Grammar::new(), "Eq a => List a", &k, "[Eq a] => (List a)")
+}
+
+///////////////////////////////////////////////////////////////////////////
 // Type Class declaration
 //
 // In real Haskell, we might write:
@@ -241,14 +266,10 @@ fn parse_classDecl_two_super() {
 // We omit the actual method declarations since we don't care.
 
 pub fn InstanceDecl() -> GParser<tc::Instance> {
-    return (Instance().
-            thenr(Pred().rep_sep(0, Comma()).thenl(FatArrow()).opt()).
-            then(Pred())).map(mk_instance);
+    return (Instance().thenr(Qual(Pred()))).map(mk_instance);
 
-    fn mk_instance((preds, head): (Option<~[tc::Pred]>, tc::Pred))
-                   -> tc::Instance {
-        let preds = match preds { Some(v) => v, None => ~[] };
-        tc::Instance { qual: tc::Qual { preds: preds, head: head } }
+    fn mk_instance(q: tc::Qual<tc::Pred>) -> tc::Instance {
+        tc::Instance { qual: q }
     }
 }
 
