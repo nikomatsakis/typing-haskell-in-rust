@@ -6,6 +6,7 @@ use intern::Id;
 use parse;
 use std::hashmap::HashMap;
 use ty;
+use tc = type_class;
 
 pub struct Context {
     interner: intern::Interner,
@@ -33,36 +34,42 @@ impl Context {
         let k_star = @ty::Star;
 
         let types = StandardTypes {
-            t_unit: @ty::TCon(ty::Tycon { id: interner.id("()") }),
+            t_unit: @ty::TCon(ty::Tycon { id: interner.id("Unit") }),
             t_char: @ty::TCon(ty::Tycon { id: interner.id("Char") }),
             t_int: @ty::TCon(ty::Tycon { id: interner.id("Int") }),
             t_integer: @ty::TCon(ty::Tycon { id: interner.id("Integer") }),
             t_float: @ty::TCon(ty::Tycon { id: interner.id("Float") }),
             t_double: @ty::TCon(ty::Tycon { id: interner.id("Double") }),
 
-            t_list: @ty::TCon(ty::Tycon { id: interner.id("[]") }),
-            t_arrow: @ty::TCon(ty::Tycon { id: interner.id("(->)") }),
-            t_tuple2: @ty::TCon(ty::Tycon { id: interner.id("(,)") }),
+            t_list: @ty::TCon(ty::Tycon { id: interner.id("List") }),
+            t_arrow: @ty::TCon(ty::Tycon { id: interner.id("Arrow") }),
+            t_tuple2: @ty::TCon(ty::Tycon { id: interner.id("Pair") }),
         };
 
         let mut kinds = HashMap::new();
-        kinds.insert(interner.id("()"), k_star);
+        kinds.insert(interner.id("Unit"), k_star);
         kinds.insert(interner.id("Char"), k_star);
         kinds.insert(interner.id("Int"), k_star);
         kinds.insert(interner.id("Integer"), k_star);
         kinds.insert(interner.id("Float"), k_star);
         kinds.insert(interner.id("Double"), k_star);
         kinds.insert(interner.id("[]"), @ty::KFun(k_star, k_star));
-        kinds.insert(interner.id("(->)"),
+        kinds.insert(interner.id("Arrow"),
                      @ty::KFun(k_star, @ty::KFun(k_star, k_star)));
-        kinds.insert(interner.id("(,)"),
+        kinds.insert(interner.id("Pair"),
                      @ty::KFun(k_star, @ty::KFun(k_star, k_star)));
+
+        // Common type variables: a, b, c, d all have kind *
+        kinds.insert(interner.id("a"), k_star);
+        kinds.insert(interner.id("b"), k_star);
+        kinds.insert(interner.id("c"), k_star);
+        kinds.insert(interner.id("d"), k_star);
 
         Context {
             interner: interner,
             k_star: k_star,
             types: types,
-            kinds: HashMap::new(),
+            kinds: kinds,
         }
     }
 
@@ -97,6 +104,11 @@ impl Context {
         parse::parse_or_fail(&g, self, text.as_bytes(), &g.ty)
     }
 
+    pub fn parse_pred(&mut self, text: &str) -> tc::Pred {
+        let g = grammar::Grammar::new();
+        parse::parse_or_fail(&g, self, text.as_bytes(), &grammar::Pred())
+    }
+
     pub fn mk_str<D:Describe>(&self, d: D) -> ~str {
         let mut s = ~"";
         d.describe(self, &mut s);
@@ -128,7 +140,20 @@ impl<T:Describe> Describe for @T {
     }
 }
 
+impl<'a,T:Describe> Describe for &'a T {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        let & & ref this = self;
+        this.describe(cx, out);
+    }
+}
+
 impl<D:Describe> Describe for ~[D] {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        self.slice_from(0).describe(cx, out);
+    }
+}
+
+impl<'a,D:Describe> Describe for &'a [D] {
     fn describe(&self, cx: &Context, out: &mut ~str) {
         let mut comma = false;
         out.push_char('[');
@@ -138,6 +163,15 @@ impl<D:Describe> Describe for ~[D] {
             comma = true;
         }
         out.push_char(']');
+    }
+}
+
+impl<D:Describe> Describe for Option<D> {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        match *self {
+            Some(ref d) => d.describe(cx, out),
+            None => out.push_str("None")
+        }
     }
 }
 

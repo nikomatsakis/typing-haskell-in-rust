@@ -28,6 +28,7 @@ impl Interner {
         match self.identifiers.iter().enumerate().find(|&(_,p)| p.slice(0, p.len()) == s) {
             Some((i,_)) => Id(i),
             None => {
+                debug!("Identifier {} = {}", self.identifiers.len(), s);
                 self.identifiers.push(s.to_owned());
                 Id(self.identifiers.len() - 1)
             }

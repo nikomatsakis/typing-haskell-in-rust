@@ -90,8 +90,8 @@ fn parse_kind_paren_r() {
 
 pub fn KindDef() -> GParser<ty::KindDef> {
     let c = Choice(~[
-            Ident().thenl(ColonColon()).then(Kind()).thenl(Semi()),
-            TypeName().thenl(ColonColon()).then(Kind()).thenl(Semi()) ]);
+            Ident().thenl(ColonColon()).then(Kind()),
+            TypeName().thenl(ColonColon()).then(Kind()) ]);
     return c.map(mk);
 
     fn mk((id, kind): (Id, @ty::Kind)) -> ty::KindDef {
@@ -101,7 +101,7 @@ pub fn KindDef() -> GParser<ty::KindDef> {
 
 #[test]
 fn parse_kind_def() {
-    let k = KindDef().rep(1);
+    let k = KindDef().rep_sep(1, Semi());
     test(Grammar::new(),
          "a :: * -> *; Box :: *;",
          &k,
@@ -174,7 +174,7 @@ fn parse_ty_paren() {
 //
 // TypeClass type ==> e.g., Eq Int
 
-fn Pred() -> GParser<tc::Pred> {
+pub fn Pred() -> GParser<tc::Pred> {
     return TypeName().then(Ty()).map(mk_pred);
 
     fn mk_pred((type_class, ty): (Id, @ty::Type)) -> tc::Pred {
@@ -202,7 +202,7 @@ fn parse_pred() {
 //
 //   class C, D => E
 
-fn ClassDecl() -> GParser<tc::ClassDecl> {
+pub fn ClassDecl() -> GParser<tc::ClassDecl> {
     return (Class().
             thenr(TypeName().rep_sep(0, Comma()).thenl(FatArrow()).opt()).
             then(TypeName())).map(mk_tc);
@@ -240,7 +240,7 @@ fn parse_classDecl_two_super() {
 //
 // We omit the actual method declarations since we don't care.
 
-fn InstanceDecl() -> GParser<tc::Instance> {
+pub fn InstanceDecl() -> GParser<tc::Instance> {
     return (Instance().
             thenr(Pred().rep_sep(0, Comma()).thenl(FatArrow()).opt()).
             then(Pred())).map(mk_instance);
