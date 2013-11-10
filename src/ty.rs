@@ -34,6 +34,17 @@ pub struct KindDef {
     kind: @Kind
 }
 
+impl Type {
+    pub fn is_head_normal_form(&self) -> bool {
+        match *self {
+            TVar(_) => true,
+            TCon(_) => false,
+            TAp(t, _) => t.is_head_normal_form(),
+            TGen(_) => fail!("Generic type found")
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // Strings
 

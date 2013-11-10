@@ -1,5 +1,6 @@
 // Context: ties everything together
 
+use err;
 use grammar;
 use intern;
 use intern::Id;
@@ -171,6 +172,15 @@ impl<D:Describe> Describe for Option<D> {
         match *self {
             Some(ref d) => d.describe(cx, out),
             None => out.push_str("None")
+        }
+    }
+}
+
+impl<D:Describe> Describe for err::Fallible<D> {
+    fn describe(&self, cx: &Context, out: &mut ~str) {
+        match *self {
+            Ok(ref d) => d.describe(cx, out),
+            Err(_) => out.push_str("Err")
         }
     }
 }

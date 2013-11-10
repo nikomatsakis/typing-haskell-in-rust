@@ -1,6 +1,10 @@
 use cx::{Context, Describe};
+use err;
+use err::Fallible;
 use intern::{Interner, Id};
 use std::hashmap::HashMap;
+use std::result;
+use std::vec;
 use ty;
 use ty::Types;
 use unification::Unification;
@@ -14,7 +18,7 @@ pub struct Qual<T> {
 }
 
 /// `ty` is a member of the type class `type_class`
-#[deriving(Eq)]
+#[deriving(Eq,Clone)]
 pub struct Pred {
     type_class: Id,
     ty: @ty::Type,
@@ -32,6 +36,12 @@ pub struct Class {
 
 pub struct Instance {
     qual: Qual<Pred>
+}
+
+impl Pred {
+    pub fn is_head_normal_form(&self) -> bool {
+        self.ty.is_head_normal_form()
+    }
 }
 
 impl<T:ty::Types> ty::Types for Qual<T> {
@@ -182,12 +192,14 @@ impl ClassEnv {
         self.add_instance_str(cx, ~[], "Eq Int");
 
         self.add_instance_str(cx, ~["Eq a", "Eq b"], "Eq (Pair a b)");
+        self.add_instance_str(cx, ~["Eq a"], "Eq (List a)");
 
         self.add_instance_str(cx, ~[], "Ord Unit");
         self.add_instance_str(cx, ~[], "Ord Char");
         self.add_instance_str(cx, ~[], "Ord Int");
 
         self.add_instance_str(cx, ~["Ord a", "Ord b"], "Ord (Pair a b)");
+        self.add_instance_str(cx, ~["Ord a"], "Ord (List a)");
     }
 
     pub fn add_core(&mut self, cx: &mut Context) {
@@ -209,7 +221,10 @@ impl ClassEnv {
         result
     }
 
-    pub fn by_instance(&self, cx: &Context, head: Pred) -> Option<~[Pred]> {
+    pub fn by_instance(&self,
+                       cx: &Context,
+                       head: Pred)
+                       -> Fallible<~[Pred]> {
         /*!
          * Returns a list of type class relations that must hold if head holds,
          * due to the predicates attached to instance declarations.
@@ -223,7 +238,7 @@ impl ClassEnv {
                     let result = candidate.qual.preds.apply(&subst);
                     debug!("by_instance head={} result={}",
                            cx.mk_str(head), cx.mk_str(&result));
-                    return Some(result);
+                    return Ok(result);
                 }
                 Err(e) => {
                     debug!("error: {:?}", e);
@@ -232,10 +247,25 @@ impl ClassEnv {
         }
         debug!("by_instance head={} result=None",
                cx.mk_str(head));
-        None
+        Err(err::NoInstance(head))
     }
 
     pub fn entail(&self, cx: &Context, preds: &[Pred], head: Pred) -> bool {
+        // This algorithm seems incomplete to me. The paper claims that it
+        // computes whether knowing that `preds` hold implies that `head`
+        // holds. But there are cases where `entail` returns false
+        // when it seems like it ought to return true. For example,
+        //
+        //     Ord (Pair Foo Bar) `entail` Eq Foo == False
+        //
+        // but `Ord (Pair Foo Bar)` implies (by instance) that
+        // `Ord Foo` and `Ord Bar` and `Ord Foo` implies (by superclass)
+        // `Eq Foo`.
+        //
+        // I think ultimately the reason for this is that it is assumed
+        // (though not stated in the paper) that `preds` are in
+        // head-normal-form.
+
         // Is `head` implied directly by something in `preds`?
         debug!("entail: preds={} head={}",
                cx.mk_str(preds),
@@ -244,10 +274,61 @@ impl ClassEnv {
             // If not, is there an instance where `preds` satisfies all
             // the preconditions of the instance?
             match self.by_instance(cx, head) {
-                Some(heads) => heads.iter().all(|&h| self.entail(cx, preds, h)),
-                None => false
+                Ok(heads) => heads.iter().all(|&h| self.entail(cx, preds, h)),
+                Err(_) => false
             }
         }
+    }
+
+    fn pred_to_head_normal_form(&self,
+                                cx: &Context,
+                                p: Pred)
+                                -> Fallible<~[Pred]> {
+        if p.is_head_normal_form() {
+            Ok(~[p])
+        } else {
+            self.by_instance(cx, p).and_then(
+                |ps| self.preds_to_head_normal_form(cx, ps))
+        }
+    }
+
+    fn preds_to_head_normal_form(&self,
+                                 cx: &Context,
+                                 ps: &[Pred])
+                                 -> Fallible<~[Pred]> {
+        seq!(
+            let ps <- result::collect(ps.iter().map(
+                    |&p| self.pred_to_head_normal_form(cx, p)));
+            return ps.move_iter().flat_map(|v| v.move_iter()).collect();
+        )
+    }
+
+    fn simplify(&self,
+                cx: &Context,
+                preds: &[Pred])
+                -> ~[Pred] {
+        debug!("simplify preds={}", cx.mk_str(preds));
+        let mut result = ~[];
+        for i in range(0, preds.len()) {
+            let the_rest = vec::append(result.clone(),
+                                       preds.slice_from(i+1));
+            if !self.entail(cx, the_rest, preds[i]) {
+                result.push(preds[i]);
+            }
+        }
+        debug!("simplify preds={} result={}",
+               cx.mk_str(preds), cx.mk_str(&result));
+        result
+    }
+
+    fn reduce(&self,
+              cx: &Context,
+              preds: &[Pred])
+              -> Fallible<~[Pred]> {
+        seq!(
+            let hnfs <- self.preds_to_head_normal_form(cx, preds);
+            return self.simplify(cx, hnfs);
+        )
     }
 }
 
@@ -317,7 +398,7 @@ fn by_instance_none() {
     cx.load_kind_defs(["Foo :: *", "Bar :: *"]);
     let pred1 = cx.parse_pred("Ord Foo");
     let preds = env.by_instance(&cx, pred1);
-    assert_eq!(cx.mk_str(preds), ~"None");
+    assert_eq!(cx.mk_str(preds), ~"Err");
 }
 
 #[test]
@@ -328,4 +409,33 @@ fn entail1() {
     let pred2 = cx.parse_pred("Ord Foo");
     let pred3 = cx.parse_pred("Ord Bar");
     assert!(env.entail(&cx, [pred2,pred3], pred1));
+}
+
+#[test]
+fn to_hnf() {
+    let (mut cx, env) = init_env();
+    cx.load_kind_defs(["Foo :: *", "Bar :: *"]);
+    let pred1 = cx.parse_pred("Ord (Pair a b)");
+    let hnfs = env.preds_to_head_normal_form(&cx, [pred1]);
+    assert_eq!(cx.mk_str(hnfs), ~"[Ord a,Ord b]");
+}
+
+#[test]
+fn reduce_1() {
+    let (mut cx, env) = init_env();
+    cx.load_kind_defs(["Foo :: *", "Bar :: *"]);
+    let pred1 = cx.parse_pred("Ord (Pair a b)");
+    let r = env.reduce(&cx, [pred1]);
+    assert_eq!(cx.mk_str(r), ~"[Ord a,Ord b]");
+}
+
+#[test]
+fn reduce_2() {
+    let (mut cx, env) = init_env();
+    cx.load_kind_defs(["Foo :: *", "Bar :: *"]);
+    let pred1 = cx.parse_pred("Ord (Pair a b)");
+    let pred2 = cx.parse_pred("Eq (Pair a b)");
+    let pred3 = cx.parse_pred("Ord (List a)");
+    let r = env.reduce(&cx, [pred1, pred2, pred3]);
+    assert_eq!(cx.mk_str(r), ~"[Ord b,Ord a]");
 }

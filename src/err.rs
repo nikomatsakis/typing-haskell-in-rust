@@ -1,6 +1,7 @@
 use cx;
 use cx::Describe;
 use ty;
+use tc = type_class;
 use intern;
 
 pub enum Err {
@@ -9,6 +10,7 @@ pub enum Err {
     OccursCheck(ty::Tyvar, @ty::Type),
     ClassesDiffer(intern::Id, intern::Id),
     KindCheck(ty::Tyvar, @ty::Type),
+    NoInstance(tc::Pred)
 }
 
 pub type Fallible<T> = Result<T,Err>;
